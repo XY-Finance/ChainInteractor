@@ -1,0 +1,25 @@
+> try7702@0.1.0 run-7702-no-sponsor
+> tsx run-7702-example-no-sponsor.ts
+
+🚀 Starting ZeroDev EIP-7702 Example (No Gas Sponsorship)...
+📡 Using ZeroDev RPC: https://rpc.zerodev.app/api/v3/[YOUR_PROJECT_ID]/chain/11155111
+🔑 EOA Address: 0x856c363e043Ac34B19D584D3930bfa615947994E
+🏗️  Creating EIP-7702 Smart Account...
+✅ Smart Account Address: 0x856c363e043Ac34B19D584D3930bfa615947994E
+ℹ️  Note: Smart Account address is the same as EOA address in EIP-7702!
+🔧 Creating Kernel Client (without paymaster)...
+📤 Sending User Operation...
+⚠️  Note: This will require gas fees to be paid by the account
+✅ UserOp sent: 0x7dbc0fc2603d7623ec4cfe6bfcd427c5241747f264e1b84facc5a32299d4908e
+⏳ Waiting for UserOp to be completed...
+🎉 UserOp completed!
+🔗 Transaction URL: https://sepolia.etherscan.io/tx/0x98131078b44839c69d07b352174ddd2beb5fa8dd72325bb6c2e5927432214c39
+📊 Transaction Hash: 0x98131078b44839c69d07b352174ddd2beb5fa8dd72325bb6c2e5927432214c39
+
+✨ EIP-7702 Example completed successfully!
+
+📋 Summary:
+- EOA Address: 0x856c363e043Ac34B19D584D3930bfa615947994E
+- Smart Account Address: 0x856c363e043Ac34B19D584D3930bfa615947994E
+- EIP-7702: Smart account deployed as regular EOA
+- Gas Sponsorship: Not configured (requires dashboard setup)

@@ -1,0 +1,111 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "scripts"
+out = "out"
+libs = ["lib"]
+remappings=[
+    "@openzeppelin/=lib/openzeppelin-contracts",
+    "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable",
+    "@openzeppelin-foundry-upgrades/=lib/openzeppelin-foundry-upgrades",
+    "@solmate/=lib/solmate"
+]
+fs_permissions = [
+    { access = "read", path = "./configs/prod_config.json"},
+    { access = "read", path = "./configs/staging_config.json"},
+    { access = "read", path = "./configs/dev_config.json"},
+    { access = "read-write", path = "./configs/prod_output.json"},
+    { access = "read-write", path = "./configs/staging_output.json"},
+    { access = "read-write", path = "./configs/dev_output.json"},
+    { access = "read", path = "./configs/shared_mainnet.json"},
+    { access = "read", path = "./configs/superIntent_configs_parsed.json"},
+    { access = "read", path = "out" },
+]
+ast = true
+# ffi = true  # enabled when need to test upgrade compatibility
+build_info = true
+extra_output = ["storageLayout"]
+auto_detect_solc = true
+isolate = true
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+
+[fmt]
+# Globset pattern for any file under any subdirectory of src/interfaces/protocols
+ignore=["src/interfaces/protocols/**/*"]
+
+[profile.dependency]
+openzeppelin = { git = "https://github.com/OpenZeppelin/openzeppelin-contracts", tag = "v5.2.0" }
+forge-std = { git = "https://github.com/foundry-rs/forge-std", tag = "v1.9.6" }
+# permit2 = { git = "https://github.com/Uniswap/permit2", tag = "v1.0.0" }
+
+[rpc_endpoints]
+1 = "https://mainnet.infura.io/v3/${INFURA}" # ETH
+# 1 = "https://eth.llamarpc.com" # ETH
+10 = "https://optimism-mainnet.infura.io/v3/${INFURA}" # Optimism
+56 = "https://lively-white-yard.bsc.quiknode.pro/ade5754b095b71d4217472aa98df7278b19f84aa/" # BSC
+108 = "https://mainnet-rpc.thundercore.com" # Metis
+137 = "https://polygon-mainnet.infura.io/v3/${INFURA}" # Polygon
+196 = "https://rpc.xlayer.tech" # X Layer
+250 = "https://newest-light-field.fantom.quiknode.pro/fc31d5db54478a2db5531f18a2ce41cfcde97114/" # Fantom
+321 = "https://rpc-mainnet.kcc.network" # KCC
+592 = "https://evm.astar.network" # Astar
+999 = "https://rpc.hyperliquid.xyz/evm" # HyperEVM/Hyperliquid
+# 592 = "https://astar.public.blastapi.io" # Encounter: server returned an error response: error code -32603: provided gas limit is too high (can be up to 10x the block gas limit)
+1285 = "https://rpc.api.moonriver.moonbeam.network" # moonriver
+# 5000 = "https://mantle-mainnet.infura.io/v3/${INFURA}" # Mantle
+5000 = "https://rpc.mantle.xyz" # Mantle
+6699 = "https://rpc.oxscan.io" # OX
+8217 = "https://1rpc.io/klay" # Kaia
+# 8217 = "https://public-node-api.klaytnapi.com/v1/cypress" # Kaia
+# 8217 = "https://klaytn-pokt.nodies.app" # Kaia
+8453 = "https://base-mainnet.infura.io/v3/${INFURA}" # Base
+10507 = "https://mainnetrpc.num.network" # Numbers
+42161 = "https://arbitrum-mainnet.infura.io/v3/${INFURA}" # Arbitrum
+43114 = "https://avalanche-mainnet.infura.io/v3/${INFURA}" # Avalanche
+# 59144 = "https://linea-mainnet.infura.io/v3/${INFURA}" # Linea
+59144 = "https://rpc.linea.build" # Linea
+80094 = "https://rpc.berachain.com" # Bera
+81457 = "https://blast-mainnet.infura.io/v3/${INFURA}" # Blast
+167000 = "https://rpc.mainnet.taiko.xyz" # taiko
+# 167000 = "https://taiko.blockpi.network/v1/rpc/public" # taiko
+# 534352 = "https://rpc.scroll.io" # Scroll
+534352 = "https://fluent-quiet-dinghy.scroll-mainnet.quiknode.pro/7e29b6e8c5eb89e1fef07e11b9460aa7de7cfa0c/" # Scroll
+25 = "https://evm.cronos.org" # Cronos
+
+99999 = "http://34.81.239.186:8080" # Settlement chain
+
+# ZK networks
+324 = "https://mainnet.era.zksync.io" # zkSync
+388 = "https://mainnet.zkevm.cronos.org" # Cronos zkEVM
+1101 = "https://polygon-zkevm-mainnet.public.blastapi.io" # Ploygon zkEVM
+# 1101 = "https://polygon-zkevm.drpc.org" # Ploygon zkEVM
+1111 = "https://api.wemix.com/" # WEMIX3.0
+2741 = "https://api.mainnet.abs.xyz" # Abstract
+
+# Testnets
+998 = "https://rpc.hyperliquid-testnet.xyz/evm" # Hyperliquid
+11155111 = "https://sepolia.infura.io/v3/${INFURA}" # Sepolia
+31337 = "127.0.0.1:8545" # anvil local testnet
+
+# Public rpc for CI
+CI_8453 = "https://base-mainnet.public.blastapi.io"
+CI_59144 = "https://rpc.linea.build"
+CI_1 = "https://eth.llamarpc.com"
+CI_137 = "https://polygon-rpc.com"
+CI_42161 = "https://arbitrum-one-rpc.publicnode.com"
+
+[etherscan]
+# arbitrum = {key = "${ARBISCAN_KEY}", url = "https://api.arbiscan.io/api"}
+# avalanche = {key = "${SNOWTRACE_KEY}", url = "https://api.snowtrace.io/api"}
+# blast = {key = "${BLASTSCAN_KEY}", url = "https://api.blastscan.io/api"}
+# bsc = {key = "${BSCSCAN_KEY}", url = "https://api.bscscan.com/api"}
+# fantom = {key = "${FTMSCAN_KEY}", url = "https://api.ftmscan.com/api"}
+# mainnet = {key = "${ETHERSCAN_KEY}"}
+# polygon = {key = "${POLYGONSCAN_KEY}", url = "https://api.polygonscan.com/api"}
+# 10 = {key = "${OPTIMISM_ETHERSCAN_KEY}", url = "https://api-optimistic.etherscan.io/api"}
+# 8453 = {key = "${BASESCAN_KEY}", url = "https://api.basescan.org/api"}
+# 534352 = {key = "${SCROLLSCAN_KEY}", url = "https://api.scrollscan.com/api"}
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
