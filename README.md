@@ -102,8 +102,8 @@ Create a `.env.local` file:
 # ZeroDev Project ID (get from https://dashboard.zerodev.app)
 ZERODEV_PROJECT_ID=your_zerodev_project_id_here
 
-# Your private key for testing (REQUIRED for scripts)
-PRIVATE_KEY=0xYourPrivateKeyHere
+# Your private keys for testing (REQUIRED - quoted space-separated format)
+PRIVATE_KEYS="0x111...111 0x222...222 0x333...333"
 
 # Optional: WalletConnect Project ID
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id_here

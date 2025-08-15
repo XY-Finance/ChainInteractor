@@ -1,13 +1,12 @@
 'use client'
 
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { useState } from 'react'
-import { config } from '../../config/config'
+import { useWalletManager } from '../../hooks/useWalletManager'
 
 export default function Home() {
-  const { address, isConnected } = useAccount()
+  const { isConnected, currentAccount, error } = useWalletManager()
   const [amount, setAmount] = useState('')
   const [recipient, setRecipient] = useState('')
 
@@ -52,18 +51,34 @@ export default function Home() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-          <div className="flex justify-center mb-8">
-            <ConnectButton />
-          </div>
-
-          {isConnected && (
+          {!isConnected ? (
+            <div className="text-center py-8">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-yellow-900 mb-3">
+                  🔗 Connect Your Wallet First
+                </h3>
+                <p className="text-yellow-800 text-sm mb-4">
+                  Please go to the <strong>Modular Wallet System</strong> tab and connect your wallet first.
+                </p>
+                <a
+                  href="/"
+                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 transition-colors"
+                >
+                  Go to Wallet System
+                </a>
+              </div>
+            </div>
+          ) : (
             <div className="space-y-6">
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Smart Account Address
+                  Connected Wallet Address
                 </h3>
                 <p className="text-sm text-gray-600 font-mono break-all">
-                  {address}
+                  {currentAccount?.address}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Type: {currentAccount?.type}
                 </p>
               </div>
 

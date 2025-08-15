@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { sepolia } from 'viem/chains'
-import { getDeleGatorEnvironment } from '@metamask/delegation-toolkit'
+import { getDeleGatorEnvironment, Implementation } from '@metamask/delegation-toolkit'
 import { type DelegateeContract, type AuthorizationData, type SignedAuthorization } from '../types'
 import { createLogEntry, handleError } from '../utils'
 
@@ -33,7 +33,7 @@ export function useEIP7702() {
           name: 'MetaMask deleGator Core',
           address: contractAddress,
           description: 'Core MetaMask deleGator implementation for EIP-7702',
-          implementation: 'Stateless7702' as unknown,
+          implementation: Implementation.Stateless7702,
         }
 
         setSelectedContract(defaultContract)

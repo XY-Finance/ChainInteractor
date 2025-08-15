@@ -4,6 +4,7 @@ import "../styles/globals.css";
 import '@rainbow-me/rainbowkit/styles.css';
 import { Providers } from '../lib/providers';
 import Navigation from '../components/layout/Navigation';
+import { ClientWrapper } from '../components/layout/ClientWrapper';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,8 +32,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <Navigation />
-          {children}
+          <ClientWrapper>
+            <Navigation />
+            {children}
+          </ClientWrapper>
         </Providers>
       </body>
     </html>

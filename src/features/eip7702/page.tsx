@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { usePublicClient } from 'wagmi'
+import { useWalletManager } from '../../hooks/useWalletManager'
 import {
   createPublicClient,
   createWalletClient,
@@ -19,7 +19,6 @@ import {
   toMetaMaskSmartAccount,
   getDeleGatorEnvironment,
 } from '@metamask/delegation-toolkit'
-import { EIP7702_CONFIG } from '../../config/eip7702'
 
 interface DelegateeContract {
   name: string
@@ -38,9 +37,10 @@ const DELEGATEE_CONTRACTS: DelegateeContract[] = [
 ]
 
 export default function EIP7702Page() {
-  const { address, isConnected } = useAccount()
+  const { isConnected, currentAccount, signMessage } = useWalletManager()
   const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
+
+  const address = currentAccount?.address
 
   const [selectedContract, setSelectedContract] = useState<DelegateeContract | null>(null)
   const [authorizationHash, setAuthorizationHash] = useState<any>(null)
@@ -66,7 +66,6 @@ export default function EIP7702Page() {
         const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl
 
         DELEGATEE_CONTRACTS[0].address = contractAddress
-        DELEGATEE_CONTRACTS[1].address = contractAddress // Using same for demo
 
         addLog(`✅ Initialized delegatee contracts`)
         addLog(`📋 MetaMask deleGator Core: ${contractAddress}`)
@@ -83,8 +82,17 @@ export default function EIP7702Page() {
   }
 
   const authorize7702 = async () => {
-    if (!walletClient || !selectedContract || !address || !publicClient) {
-      addLog('❌ Wallet client, selected contract, address, or public client not available')
+    if (!isConnected || !currentAccount) {
+      addLog('❌ Please connect your wallet first')
+      return
+    }
+
+    if (!selectedContract || !address || !publicClient) {
+      addLog('❌ Selected contract, address, or public client not available')
+      addLog(`   - Wallet connected: ${isConnected}`)
+      addLog(`   - Address: ${address}`)
+      addLog(`   - Selected contract: ${selectedContract ? 'yes' : 'no'}`)
+      addLog(`   - Public client: ${publicClient ? 'yes' : 'no'}`)
       return
     }
 
@@ -105,19 +113,17 @@ export default function EIP7702Page() {
         executor: 'self' as const,
       }
 
-            addLog(`📝 Authorization data structure:`)
+      addLog(`📝 Authorization data structure:`)
       addLog(`   - Address: ${authorizationData.address}`)
       addLog(`   - Chain ID: ${authorizationData.chainId}`)
       addLog(`   - Nonce: ${authorizationData.nonce}`)
       addLog(`   - Contract: ${authorizationData.contractAddress}`)
       addLog(`   - Executor: ${authorizationData.executor}`)
 
-      // For now, just store the authorization data
-      // We'll implement the actual signing in the next step
+      // Store the authorization data
       setAuthorizationHash(authorizationData)
       addLog('✅ Authorization data prepared successfully')
-      addLog('📝 Ready to sign authorization (implementation coming next)')
-      addLog('🔧 Next step: Implement signature creation with MetaMask')
+      addLog('📝 Ready to sign authorization')
     } catch (error) {
       addLog(`❌ Authorization failed: ${error}`)
     } finally {
@@ -125,47 +131,23 @@ export default function EIP7702Page() {
     }
   }
 
-    const signAuthorization = async () => {
-    if (!walletClient || !authorizationHash || !address) {
-      addLog('❌ Wallet client, authorization data, or address not available')
+  const signAuthorization = async () => {
+    if (!authorizationHash || !address) {
+      addLog('❌ Authorization data or address not available')
       return
     }
 
     setIsSigning(true)
-    addLog('✍️ Signing authorization with MetaMask...')
+    addLog('✍️ Signing authorization with connected wallet...')
 
     try {
-      // Create the authorization message to sign
-      const authorizationMessage = {
-        address: authorizationHash.address as `0x${string}`,
-        chainId: authorizationHash.chainId,
-        nonce: authorizationHash.nonce,
-        contractAddress: authorizationHash.contractAddress as `0x${string}`,
-        executor: authorizationHash.executor,
-      }
+      // Use our wallet system's signMessage method
+      const messageToSign = JSON.stringify(authorizationHash)
+      const signature = await signMessage(messageToSign)
 
-      // Create the message to sign (EIP-7702 authorization format)
-      const messageToSign = JSON.stringify(authorizationMessage)
-      addLog(`📝 Message to sign: ${messageToSign}`)
-
-      // Sign the message using MetaMask
-      const signature = await walletClient.request({
-        method: 'personal_sign',
-        params: [messageToSign, address],
-      }) as `0x${string}`
-
-      // Create the signed authorization object
-      const signedAuth = {
-        ...authorizationMessage,
-        signature: signature,
-      }
-
-      setSignedAuthorization(signedAuth)
-      addLog(`✅ Authorization signed successfully`)
-      addLog(`📝 Signature: ${signature.substring(0, 20)}...`)
-      addLog('🚀 Ready to submit authorization transaction')
-      addLog('📋 Signed authorization data:')
-      addLog(JSON.stringify(signedAuth, null, 2))
+      setSignedAuthorization(signature)
+      addLog('✅ Authorization signed successfully')
+      addLog(`📝 Signature: ${signature}`)
     } catch (error) {
       addLog(`❌ Signing failed: ${error}`)
     } finally {
@@ -173,141 +155,34 @@ export default function EIP7702Page() {
     }
   }
 
-  // Alternative implementation using walletClient.signAuthorization (for reference)
-  const signAuthorizationWithViem = async () => {
-    if (!walletClient || !selectedContract || !address) {
-      addLog('❌ Wallet client, selected contract, or address not available')
-      return
-    }
-
-    setIsSigning(true)
-    addLog('✍️ Attempting to sign authorization with viem signAuthorization...')
-
-    try {
-      // This will fail with JSON-RPC accounts (like MetaMask)
-      // It only works with private key accounts
-      const authorization = await walletClient.signAuthorization({
-        account: address,
-        contractAddress: selectedContract.address,
-        executor: 'self',
-      })
-
-      setSignedAuthorization(authorization)
-      addLog(`✅ Authorization signed with viem: ${JSON.stringify(authorization, null, 2)}`)
-    } catch (error) {
-      addLog(`❌ viem signAuthorization failed: ${error}`)
-      addLog('💡 This is expected - signAuthorization only works with private key accounts')
-      addLog('💡 Use the "Sign Authorization" button above for MetaMask compatibility')
-    } finally {
-      setIsSigning(false)
-    }
-  }
-
   const submitAuthorization = async () => {
-    if (!walletClient || !signedAuthorization) {
-      addLog('❌ Wallet client or signed authorization not available')
+    if (!signedAuthorization) {
+      addLog('❌ Signed authorization not available')
       return
     }
 
-    setIsSubmitting(true)
-    addLog('📤 Submitting authorization transaction...')
-
-    try {
-      // Create the EIP-7702 transaction with authorization
-      const hash = await walletClient.sendTransaction({
-        to: zeroAddress,
-        data: '0x',
-        value: BigInt(0),
-        // Note: authorizationList is not yet supported in viem for JSON-RPC accounts
-        // This will be implemented in a future update
-      })
-
-      setTransactionHash(hash)
-      addLog(`✅ Transaction submitted: ${hash}`)
-      addLog('⏳ Waiting for transaction confirmation...')
-
-      // Wait for transaction confirmation
-      const receipt = await publicClient?.waitForTransactionReceipt({ hash })
-      if (receipt) {
-        addLog(`🎉 Transaction confirmed! Block: ${receipt.blockNumber}`)
-        addLog(`🔗 View on Etherscan: ${sepolia.blockExplorers?.default.url}/tx/${hash}`)
-      }
-    } catch (error) {
-      addLog(`❌ Transaction failed: ${error}`)
-    } finally {
-      setIsSubmitting(false)
-    }
+    addLog('📤 Authorization submission not yet implemented')
+    addLog('💡 This feature will be available in a future update')
   }
 
   const createSmartAccount = async () => {
-    if (!publicClient || !walletClient || !address) {
-      addLog('❌ Clients or address not available')
+    if (!publicClient || !address) {
+      addLog('❌ Public client or address not available')
       return
     }
 
-    addLog('🏗️ Creating MetaMask Smart Account...')
-
-    try {
-      const smartAccount = await toMetaMaskSmartAccount({
-        client: publicClient,
-        implementation: Implementation.Stateless7702,
-        address,
-        signatory: { walletClient },
-      })
-
-      setSmartAccountAddress(smartAccount.address)
-      addLog(`✅ Smart Account created: ${smartAccount.address}`)
-      addLog('🚀 Ready to send user operations!')
-    } catch (error) {
-      addLog(`❌ Smart Account creation failed: ${error}`)
-    }
+    addLog('🏗️ Smart Account creation not yet implemented')
+    addLog('💡 This feature will be available in a future update')
   }
 
   const sendUserOperation = async () => {
-    if (!publicClient || !walletClient || !address || !recipientAddress || !amount) {
-      addLog('❌ Missing required parameters for user operation')
+    if (!recipientAddress || !amount) {
+      addLog('❌ Recipient address or amount not provided')
       return
     }
 
-    setIsSendingUserOp(true)
-    addLog('📤 Sending user operation...')
-
-    try {
-      // Create bundler client
-      const bundlerClient = createBundlerClient({
-        client: publicClient,
-        transport: http('https://bundler.sepolia.zerodev.app'),
-      })
-
-      // Create smart account
-      const smartAccount = await toMetaMaskSmartAccount({
-        client: publicClient,
-        implementation: Implementation.Stateless7702,
-        address,
-        signatory: { walletClient },
-      })
-
-      // Send user operation
-      const userOperationHash = await bundlerClient.sendUserOperation({
-        account: smartAccount,
-        calls: [
-          {
-            to: recipientAddress as Address,
-            value: parseEther(amount),
-          }
-        ],
-        maxFeePerGas: BigInt(1),
-        maxPriorityFeePerGas: BigInt(1),
-      })
-
-      setUserOpHash(userOperationHash)
-      addLog(`✅ User operation sent: ${userOperationHash}`)
-      addLog('⏳ Waiting for user operation confirmation...')
-    } catch (error) {
-      addLog(`❌ User operation failed: ${error}`)
-    } finally {
-      setIsSendingUserOp(false)
-    }
+    addLog('📤 User operation sending not yet implemented')
+    addLog('💡 This feature will be available in a future update')
   }
 
   return (
@@ -326,11 +201,24 @@ export default function EIP7702Page() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
-          <div className="flex justify-center mb-8">
-            <ConnectButton />
-          </div>
-
-          {isConnected && (
+          {!isConnected ? (
+            <div className="text-center py-8">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-yellow-900 mb-3">
+                  🔗 Connect Your Wallet First
+                </h3>
+                <p className="text-yellow-800 text-sm mb-4">
+                  Please go to the <strong>Modular Wallet System</strong> tab and connect your wallet first.
+                </p>
+                <a
+                  href="/"
+                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 transition-colors"
+                >
+                  Go to Wallet System
+                </a>
+              </div>
+            </div>
+          ) : (
             <div className="space-y-8">
               {/* Account Information */}
               <div className="bg-gray-50 rounded-lg p-4">
@@ -339,6 +227,9 @@ export default function EIP7702Page() {
                 </h3>
                 <p className="text-sm text-gray-600 font-mono break-all">
                   {address}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Type: {currentAccount?.type}
                 </p>
               </div>
 
@@ -388,16 +279,7 @@ export default function EIP7702Page() {
                         disabled={isSigning}
                         className="bg-purple-600 text-white px-6 py-2 rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                       >
-                        {isSigning ? 'Signing...' : 'Sign Authorization (MetaMask)'}
-                      </button>
-                    )}
-                    {authorizationHash && (
-                      <button
-                        onClick={signAuthorizationWithViem}
-                        disabled={isSigning}
-                        className="bg-orange-600 text-white px-6 py-2 rounded-md font-medium hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isSigning ? 'Signing...' : 'Try viem signAuthorization'}
+                        {isSigning ? 'Signing...' : 'Sign Authorization'}
                       </button>
                     )}
                     {signedAuthorization && (
@@ -415,12 +297,9 @@ export default function EIP7702Page() {
                       <h4 className="text-sm font-semibold text-blue-900 mb-2">
                         Authorization Data Structure
                       </h4>
-                      <p className="text-xs text-blue-700 font-mono break-all whitespace-pre-wrap">
+                      <pre className="text-xs text-blue-800 overflow-x-auto">
                         {JSON.stringify(authorizationHash, null, 2)}
-                      </p>
-                      <p className="text-xs text-blue-600 mt-2">
-                        Authorization data prepared. Click "Sign Authorization" to proceed.
-                      </p>
+                      </pre>
                     </div>
                   )}
                   {signedAuthorization && (
@@ -428,51 +307,38 @@ export default function EIP7702Page() {
                       <h4 className="text-sm font-semibold text-purple-900 mb-2">
                         Signed Authorization
                       </h4>
-                      <p className="text-xs text-purple-700 font-mono break-all whitespace-pre-wrap">
-                        {JSON.stringify(signedAuthorization, null, 2)}
-                      </p>
-                      <p className="text-xs text-purple-600 mt-2">
-                        Authorization signed successfully. Click "Send Authorization" to submit.
-                      </p>
-                    </div>
-                  )}
-                  {transactionHash && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-green-900 mb-2">
-                        Transaction Hash
-                      </h4>
-                      <p className="text-xs text-green-700 font-mono break-all">
-                        {transactionHash}
+                      <p className="text-xs text-purple-800 font-mono break-all">
+                        {signedAuthorization}
                       </p>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Smart Account Creation */}
-              {transactionHash && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Create Smart Account
-                  </h3>
+              {/* Smart Account Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Smart Account Operations
+                </h3>
+                <div className="flex gap-4 flex-wrap">
                   <button
                     onClick={createSmartAccount}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-md font-medium hover:bg-purple-700 transition-colors"
+                    className="bg-indigo-600 text-white px-6 py-2 rounded-md font-medium hover:bg-indigo-700 transition-colors"
                   >
-                    Create MetaMask Smart Account
+                    Create Smart Account
                   </button>
-                  {smartAccountAddress && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-purple-900 mb-2">
-                        Smart Account Address
-                      </h4>
-                      <p className="text-xs text-purple-700 font-mono break-all">
-                        {smartAccountAddress}
-                      </p>
-                    </div>
-                  )}
                 </div>
-              )}
+                {smartAccountAddress && (
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-indigo-900 mb-2">
+                      Smart Account Address
+                    </h4>
+                    <p className="text-xs text-indigo-800 font-mono break-all">
+                      {smartAccountAddress}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* User Operation Section */}
               {smartAccountAddress && (

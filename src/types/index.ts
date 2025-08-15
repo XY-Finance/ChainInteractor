@@ -40,3 +40,6 @@ export interface FeatureConfig {
   enabled: boolean
   settings: Record<string, unknown>
 }
+
+// Re-export wallet types
+export * from './wallet'

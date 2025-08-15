@@ -47,3 +47,22 @@ export function validateAmount(amount: string): boolean {
 export function validateRecipientAddress(address: string): boolean {
   return isValidAddress(address) && address !== '0x0000000000000000000000000000000000000000'
 }
+
+/**
+ * Parse environment variable list using multiple conventions
+ * Supports: quoted space-separated, comma-separated, newline-separated
+ */
+export function parseEnvList(envValue: string | undefined): string[] {
+  if (!envValue) return []
+
+  if (envValue.includes(',')) {
+    // Comma-separated
+    return envValue.split(',').filter(item => item.trim() !== '')
+  } else if (envValue.includes('\n')) {
+    // Newline-separated
+    return envValue.split('\n').filter(item => item.trim() !== '')
+  } else {
+    // Quoted space-separated (default) - safe for shell
+    return envValue.split(/\s+/).filter(item => item.trim() !== '')
+  }
+}
