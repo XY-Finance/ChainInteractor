@@ -9,18 +9,26 @@ import { useState, useEffect } from 'react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000,
+        retry: 1,
+      },
+    },
+  }))
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   if (!mounted) {
-    return null
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>
   }
 
   return (
     <WagmiProvider config={config}>
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
           <WalletProvider>
             {children}

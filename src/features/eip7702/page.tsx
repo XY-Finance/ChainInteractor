@@ -33,11 +33,17 @@ const DELEGATEE_CONTRACTS: DelegateeContract[] = [
     address: '0x0000000000000000000000000000000000000000', // Will be set dynamically
     description: 'Core MetaMask deleGator implementation for EIP-7702',
     implementation: Implementation.Stateless7702
+  },
+  {
+    name: 'Revoke Authorization (Zero Address)',
+    address: '0x0000000000000000000000000000000000000000',
+    description: 'Remove/revoke EIP-7702 authorization by setting to zero address',
+    implementation: Implementation.Stateless7702
   }
 ]
 
 export default function EIP7702Page() {
-  const { isConnected, currentAccount, signMessage } = useWalletManager()
+  const { isConnected, currentAccount, signMessage, sign7702Authorization, submit7702Authorization } = useWalletManager()
   const publicClient = usePublicClient()
 
   const address = currentAccount?.address
@@ -55,6 +61,10 @@ export default function EIP7702Page() {
   const [recipientAddress, setRecipientAddress] = useState('')
   const [amount, setAmount] = useState('')
   const [logs, setLogs] = useState<string[]>([])
+  const [currentDelegation, setCurrentDelegation] = useState<string>('')
+  const [isCheckingDelegation, setIsCheckingDelegation] = useState(false)
+  const [verificationResult, setVerificationResult] = useState<any>(null)
+  const [currentNonce, setCurrentNonce] = useState<number | null>(null)
 
   // Initialize delegatee contracts with actual addresses
   useEffect(() => {
@@ -77,8 +87,50 @@ export default function EIP7702Page() {
     initializeContracts()
   }, [publicClient])
 
+  // Check current delegation status when address changes
+  useEffect(() => {
+    if (address && publicClient) {
+      checkCurrentDelegation()
+    }
+  }, [address, publicClient])
+
   const addLog = (message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
+  }
+
+    const checkCurrentDelegation = async () => {
+    if (!address || !publicClient) return
+
+    setIsCheckingDelegation(true)
+    try {
+      // Get the current delegation by checking the contract code at the account address
+      const code = await publicClient.getCode({ address: address as Address })
+      console.log('🔍 Code:', code)
+
+      if (!code || code === '0x') {
+        setCurrentDelegation('0x')
+        addLog('📋 Current delegation: None (no delegation)')
+      } else if (code.startsWith('0xef0100')) {
+        // Extract the contract address by trimming the 0xef0100 prefix
+        const contractAddress = '0x' + code.slice(8) // Remove '0xef0100' (8 characters)
+        setCurrentDelegation(contractAddress)
+        addLog(`📋 Current delegation: Contract ${contractAddress}`)
+      } else {
+        setCurrentDelegation(code)
+        addLog(`📋 Current delegation: Unknown contract (${code})`)
+      }
+
+      // Also fetch the current transaction count (nonce)
+      const nonce = await publicClient.getTransactionCount({ address: address as Address })
+      setCurrentNonce(nonce)
+      addLog(`📊 Current transaction count (nonce): ${nonce}`)
+    } catch (error) {
+      addLog(`❌ Error checking delegation: ${error}`)
+      setCurrentDelegation('')
+      setCurrentNonce(null)
+    } finally {
+      setIsCheckingDelegation(false)
+    }
   }
 
   const authorize7702 = async () => {
@@ -96,8 +148,9 @@ export default function EIP7702Page() {
       return
     }
 
+    const isRevocation = selectedContract.address === '0x0000000000000000000000000000000000000000'
     setIsAuthorizing(true)
-    addLog('🔐 Starting EIP-7702 authorization...')
+    addLog(`🔐 Starting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
     try {
       // Get current nonce for the account
@@ -108,22 +161,22 @@ export default function EIP7702Page() {
       const authorizationData = {
         address: address as `0x${string}`,
         chainId: sepolia.id,
-        nonce: nonce,
         contractAddress: selectedContract.address,
         executor: 'self' as const,
       }
 
-      addLog(`📝 Authorization data structure:`)
+      addLog(`📝 ${isRevocation ? 'Revocation' : 'Authorization'} data structure:`)
       addLog(`   - Address: ${authorizationData.address}`)
       addLog(`   - Chain ID: ${authorizationData.chainId}`)
-      addLog(`   - Nonce: ${authorizationData.nonce}`)
+      addLog(`   - Nonce: ${authorizationData.executor == 'self' ? nonce + 1 : nonce}`)
       addLog(`   - Contract: ${authorizationData.contractAddress}`)
       addLog(`   - Executor: ${authorizationData.executor}`)
 
-      // Store the authorization data
+      // Store the authorization data and clear any existing signed authorization
       setAuthorizationHash(authorizationData)
-      addLog('✅ Authorization data prepared successfully')
-      addLog('📝 Ready to sign authorization')
+      setSignedAuthorization(null)
+      addLog(`✅ ${isRevocation ? 'Revocation' : 'Authorization'} data prepared successfully`)
+      addLog(`📝 Ready to sign ${isRevocation ? 'revocation' : 'authorization'}`)
     } catch (error) {
       addLog(`❌ Authorization failed: ${error}`)
     } finally {
@@ -131,25 +184,49 @@ export default function EIP7702Page() {
     }
   }
 
-  const signAuthorization = async () => {
+    const signAuthorization = async () => {
     if (!authorizationHash || !address) {
       addLog('❌ Authorization data or address not available')
       return
     }
 
+    const isRevocation = authorizationHash.contractAddress === '0x0000000000000000000000000000000000000000'
     setIsSigning(true)
-    addLog('✍️ Signing authorization with connected wallet...')
+    addLog(`✍️ Creating EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
     try {
-      // Use our wallet system's signMessage method
-      const messageToSign = JSON.stringify(authorizationHash)
-      const signature = await signMessage(messageToSign)
+      // Use our wallet system's sign7702Authorization method
+      const result = await sign7702Authorization(authorizationHash)
 
-      setSignedAuthorization(signature)
-      addLog('✅ Authorization signed successfully')
-      addLog(`📝 Signature: ${signature}`)
+      // Handle both old format (just authorization) and new format (with verification)
+      const authorization = result.authorization || result
+      const verification = result.verification
+
+      // Store the signed authorization and verification results
+      setSignedAuthorization(authorization)
+      setVerificationResult(verification)
+      setAuthorizationHash(null)
+
+      addLog(`✅ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} created successfully`)
+      addLog(`📝 ${isRevocation ? 'Revocation' : 'Authorization'} structure:`)
+      addLog(`   - Signer: ${address}`)
+      addLog(`   - Delegated Contract: ${authorization.address}`)
+      addLog(`   - Chain ID: ${authorization.chainId}`)
+      addLog(`   - Nonce: ${authorization.nonce}`)
+      addLog(`   - Signature: r=${authorization.r}, s=${authorization.s}, yParity=${authorization.yParity}`)
+
+      // Log verification results
+      if (verification) {
+        addLog(`🔍 Authorization verification:`)
+        addLog(`   - Signer address: ${verification.signerAddress}`)
+        addLog(`   - Recovered address: ${verification.recoveredAddress}`)
+        addLog(`   - Addresses match: ${verification.addressesMatch ? '✅ YES' : '❌ NO'}`)
+        if (!verification.addressesMatch) {
+          addLog(`   - ⚠️  WARNING: Recovered address does not match signer address!`)
+        }
+      }
     } catch (error) {
-      addLog(`❌ Signing failed: ${error}`)
+      addLog(`❌ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} failed: ${error}`)
     } finally {
       setIsSigning(false)
     }
@@ -161,8 +238,22 @@ export default function EIP7702Page() {
       return
     }
 
-    addLog('📤 Authorization submission not yet implemented')
-    addLog('💡 This feature will be available in a future update')
+    const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === '0x0000000000000000000000000000000000000000'
+    setIsSubmitting(true)
+    addLog(`📤 Submitting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} to blockchain...`)
+
+    try {
+      // Use our wallet system's submit7702Authorization method
+      const hash = await submit7702Authorization(signedAuthorization)
+
+      setTransactionHash(hash)
+      addLog(`✅ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} submitted successfully`)
+      addLog(`📝 Transaction hash: ${hash}`)
+    } catch (error) {
+      addLog(`❌ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} submission failed: ${error}`)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const createSmartAccount = async () => {
@@ -231,15 +322,53 @@ export default function EIP7702Page() {
                 <p className="text-xs text-gray-500 mt-1">
                   Type: {currentAccount?.type}
                 </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Nonce: {currentNonce !== null ? currentNonce : 'Loading...'}
+                </p>
+              </div>
+
+              {/* Current Delegation Status */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                  Current Delegation Status
+                </h3>
+                {isCheckingDelegation ? (
+                  <p className="text-sm text-blue-700">Checking delegation status...</p>
+                ) : currentDelegation ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-blue-700 font-mono break-all">
+                      {currentDelegation === '0x'
+                        ? 'No delegation (0x)'
+                        : currentDelegation === '0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B'
+                        ? 'MetaMask deleGator Core'
+                        : 'Unknown contract'
+                      }
+                    </p>
+                    <p className="text-xs text-blue-600 font-mono break-all">
+                      Contract: {currentDelegation}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-blue-700">Unable to determine delegation status</p>
+                )}
+                <button
+                  onClick={checkCurrentDelegation}
+                  disabled={isCheckingDelegation}
+                  className="mt-2 bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isCheckingDelegation ? 'Checking...' : 'Refresh Status'}
+                </button>
               </div>
 
               {/* Delegatee Contract Selection */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Select Delegatee Contract
+                  Select Action
                 </h3>
                 <div className="grid gap-4">
-                  {DELEGATEE_CONTRACTS.map((contract, index) => (
+                  {DELEGATEE_CONTRACTS
+                    .filter(contract => contract.address !== '0x0000000000000000000000000000000000000000' || currentDelegation !== '0x')
+                    .map((contract, index) => (
                     <div
                       key={index}
                       className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -249,11 +378,24 @@ export default function EIP7702Page() {
                       }`}
                       onClick={() => setSelectedContract(contract)}
                     >
-                      <h4 className="font-semibold text-gray-900">{contract.name}</h4>
-                      <p className="text-sm text-gray-600 mt-1">{contract.description}</p>
-                      <p className="text-xs text-gray-500 font-mono mt-2 break-all">
-                        {contract.address}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">
+                            {contract.name}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {contract.description}
+                          </p>
+                          <p className="text-xs text-gray-500 font-mono mt-2 break-all">
+                            {contract.address}
+                          </p>
+                        </div>
+                        {contract.address === '0x0000000000000000000000000000000000000000' && (
+                          <div className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">
+                            Revoke
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -263,15 +405,19 @@ export default function EIP7702Page() {
               {selectedContract && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    EIP-7702 Authorization Workflow
+                    EIP-7702 {selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'} Workflow
                   </h3>
                   <div className="flex gap-4 flex-wrap">
                     <button
                       onClick={authorize7702}
                       disabled={isAuthorizing}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                      className={`px-6 py-2 rounded-md font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
+                        selectedContract?.address === '0x0000000000000000000000000000000000000000'
+                          ? 'bg-red-600 text-white hover:bg-red-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
                     >
-                      {isAuthorizing ? 'Preparing...' : 'Prepare Authorization Data'}
+                      {isAuthorizing ? 'Preparing...' : `Prepare ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'} Data`}
                     </button>
                     {authorizationHash && (
                       <button
@@ -279,16 +425,20 @@ export default function EIP7702Page() {
                         disabled={isSigning}
                         className="bg-purple-600 text-white px-6 py-2 rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                       >
-                        {isSigning ? 'Signing...' : 'Sign Authorization'}
+                        {isSigning ? 'Signing...' : `Sign ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'}`}
                       </button>
                     )}
                     {signedAuthorization && (
                       <button
                         onClick={submitAuthorization}
                         disabled={isSubmitting}
-                        className="bg-green-600 text-white px-6 py-2 rounded-md font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                        className={`px-6 py-2 rounded-md font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
+                          selectedContract?.address === '0x0000000000000000000000000000000000000000'
+                            ? 'bg-red-600 text-white hover:bg-red-700'
+                            : 'bg-green-600 text-white hover:bg-green-700'
+                        }`}
                       >
-                        {isSubmitting ? 'Submitting...' : 'Send Authorization'}
+                        {isSubmitting ? 'Submitting...' : `Send ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'}`}
                       </button>
                     )}
                   </div>
@@ -307,11 +457,13 @@ export default function EIP7702Page() {
                       <h4 className="text-sm font-semibold text-purple-900 mb-2">
                         Signed Authorization
                       </h4>
-                      <p className="text-xs text-purple-800 font-mono break-all">
-                        {signedAuthorization}
-                      </p>
+                      <pre className="text-xs text-purple-800 overflow-x-auto">
+                        {JSON.stringify(signedAuthorization, null, 2)}
+                      </pre>
                     </div>
                   )}
+
+
                 </div>
               )}
 
@@ -425,6 +577,16 @@ export default function EIP7702Page() {
               functionality using an EIP-7702 transaction. This allows your EOA to leverage the benefits
               of account abstraction, such as batch transactions, gas sponsorship, and ERC-7710 delegation capabilities.
             </p>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
+              <h3 className="text-lg font-semibold text-green-900 mb-2">✅ Real EIP-7702 Implementation:</h3>
+              <ul className="list-disc list-inside space-y-2 text-green-800">
+                <li>Creates proper EIP-7702 authorization structure</li>
+                <li>Signs authorization with correct format</li>
+                <li>Submits authorization to blockchain</li>
+                <li>Uses MetaMask deleGator Core contract</li>
+                <li>Supports authorization revocation (zero address)</li>
+              </ul>
+            </div>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
               <h3 className="text-lg font-semibold text-blue-900 mb-2">How it works:</h3>
               <ol className="list-decimal list-inside space-y-2 text-blue-800">
@@ -436,7 +598,7 @@ export default function EIP7702Page() {
               </ol>
             </div>
             <p className="text-gray-600 mt-4">
-              This implementation follows the MetaMask Delegation Toolkit documentation and supports
+              This implementation follows the <a href="https://docs.metamask.io/delegation-toolkit/development/get-started/eip7702-quickstart/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline">official MetaMask Delegation Toolkit documentation</a> and supports
               the EIP7702StatelessDeleGator contract for a lightweight and secure way to upgrade an EOA to a smart account.
             </p>
           </div>

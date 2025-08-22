@@ -18,7 +18,9 @@ export interface AuthorizationData {
 }
 
 export interface SignedAuthorization extends AuthorizationData {
-  signature: `0x${string}`
+  r: `0x${string}`
+  s: `0x${string}`
+  yParity: number
 }
 
 // UI State types

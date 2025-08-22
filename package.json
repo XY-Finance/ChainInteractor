@@ -10,7 +10,8 @@
     "run-7702": "tsx scripts/examples/run-7702-example.ts",
     "run-7702-no-sponsor": "tsx scripts/examples/run-7702-example-no-sponsor.ts",
     "check-account": "tsx scripts/examples/check-account.ts",
-    "demo-metamask-7702": "tsx scripts/demo/demo-eip7702.ts"
+    "demo-metamask-7702": "tsx scripts/demo/demo-eip7702.ts",
+    "test-eip7702": "tsx scripts/test/test-eip7702-auth.ts"
   },
   "dependencies": {
     "@metamask/delegation-toolkit": "^0.13.0-rc.3",
@@ -22,7 +23,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "tsx": "^4.20.4",
-    "viem": "^2.33.3",
+    "viem": "^2.34.0",
     "wagmi": "^2.16.3"
   },
   "devDependencies": {

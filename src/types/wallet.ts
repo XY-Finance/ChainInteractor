@@ -37,8 +37,8 @@ export interface WalletInterface {
   sendTransaction(transaction: unknown): Promise<Hex>
 
   // EIP-7702 specific methods
-  sign7702Authorization(authorizationData: unknown): Promise<Hex>
-  submit7702Authorization(signedAuthorization: Hex): Promise<Hex>
+  sign7702Authorization(authorizationData: unknown): Promise<any> // Returns authorization + verification data
+  submit7702Authorization(signedAuthorization: any): Promise<Hex>
 
   // Smart account methods
   createSmartAccount(): Promise<Address>

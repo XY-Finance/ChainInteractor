@@ -161,47 +161,57 @@ export class LocalKeyWallet extends BaseWallet {
       throw new Error('No account connected')
     }
 
-    // Use server API for signing (private keys stay on server)
-    const message = JSON.stringify(authorizationData)
+    // Use server API for EIP-7702 authorization (private keys stay on server)
     const response = await fetch('/api/wallet-operations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        operation: 'signMessage',
+        operation: 'sign7702Authorization',
         keyIndex: account.keyIndex,
-        message
+        message: JSON.stringify(authorizationData)
       })
     })
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.error || 'Failed to sign 7702 authorization')
+      throw new Error(error.error || 'Failed to create EIP-7702 authorization')
     }
 
     const data = await response.json()
-    return data.signature
+    const authorization = data.authorization
+    const verification = data.verification
+
+    // Return both authorization and verification data
+    return {
+      authorization,
+      verification
+    }
   }
 
-  async submit7702Authorization(signedAuthorization: Hex): Promise<Hex> {
-    if (!this.walletClient) {
-      throw new Error('Wallet not connected')
-    }
-
+  async submit7702Authorization(signedAuthorization: any): Promise<Hex> {
     const account = await this.getAccount()
     if (!account) {
       throw new Error('No account connected')
     }
 
-    // For environment private key wallets, we can submit the authorization
-    // This is a simplified implementation - in practice, you'd need to
-    // interact with the specific EIP-7702 contract
-    console.log('📤 Submitting 7702 authorization with environment private key wallet')
-    console.log('🔑 Account:', account.address)
-    console.log('📝 Signed Authorization:', signedAuthorization)
+    // Use server API to submit EIP-7702 authorization
+    const response = await fetch('/api/wallet-operations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: 'submit7702Authorization',
+        keyIndex: account.keyIndex,
+        message: signedAuthorization
+      })
+    })
 
-    // For now, return a dummy transaction hash
-    // In a real implementation, you'd send a transaction to the EIP-7702 contract
-    return '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to submit EIP-7702 authorization')
+    }
+
+    const data = await response.json()
+    return data.hash
   }
 
   // Override smart account methods
