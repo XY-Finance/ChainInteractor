@@ -115,7 +115,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setError(null)
 
     try {
-      const account = await walletManager.switchWallet(type)
+      const account = await walletManager.switchWallet(type, keyIndex)
       updateState()
       return account
     } catch (err) {

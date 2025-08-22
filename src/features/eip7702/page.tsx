@@ -24,7 +24,7 @@ interface DelegateeContract {
   name: string
   address: Address
   description: string
-  implementation: Implementation
+  implementation?: Implementation
 }
 
 const DELEGATEE_CONTRACTS: DelegateeContract[] = [
@@ -35,10 +35,9 @@ const DELEGATEE_CONTRACTS: DelegateeContract[] = [
     implementation: Implementation.Stateless7702
   },
   {
-    name: 'Revoke Authorization (Zero Address)',
+    name: 'Revoke Authorization',
     address: '0x0000000000000000000000000000000000000000',
     description: 'Remove/revoke EIP-7702 authorization by setting to zero address',
-    implementation: Implementation.Stateless7702
   }
 ]
 
@@ -108,7 +107,7 @@ export default function EIP7702Page() {
       console.log('🔍 Code:', code)
 
       if (!code || code === '0x') {
-        setCurrentDelegation('0x')
+        setCurrentDelegation('0x0000000000000000000000000000000000000000')
         addLog('📋 Current delegation: None (no delegation)')
       } else if (code.startsWith('0xef0100')) {
         // Extract the contract address by trimming the 0xef0100 prefix
@@ -283,50 +282,22 @@ export default function EIP7702Page() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             EIP-7702 Authorization Dashboard
           </h1>
-          <p className="text-xl text-gray-600">
-            Authorize your EOA to support MetaMask Smart Accounts
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            Based on MetaMask Delegation Toolkit
-          </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
           {!isConnected ? (
-            <div className="text-center py-8">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+            <div className="text-center py-12">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-8 max-w-md mx-auto">
                 <h3 className="text-lg font-semibold text-yellow-900 mb-3">
                   🔗 Connect Your Wallet First
                 </h3>
                 <p className="text-yellow-800 text-sm mb-4">
-                  Please go to the <strong>Modular Wallet System</strong> tab and connect your wallet first.
+                  Please connect your wallet using the dropdown in the top right to start using EIP-7702 authorization features.
                 </p>
-                <a
-                  href="/"
-                  className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 transition-colors"
-                >
-                  Go to Wallet System
-                </a>
               </div>
             </div>
           ) : (
             <div className="space-y-8">
-              {/* Account Information */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Connected Account
-                </h3>
-                <p className="text-sm text-gray-600 font-mono break-all">
-                  {address}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Type: {currentAccount?.type}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Nonce: {currentNonce !== null ? currentNonce : 'Loading...'}
-                </p>
-              </div>
-
               {/* Current Delegation Status */}
               <div className="bg-blue-50 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">
@@ -339,7 +310,7 @@ export default function EIP7702Page() {
                     <p className="text-sm text-blue-700 font-mono break-all">
                       {currentDelegation === '0x'
                         ? 'No delegation (0x)'
-                        : currentDelegation === '0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B'
+                        : currentDelegation === '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b'
                         ? 'MetaMask deleGator Core'
                         : 'Unknown contract'
                       }
@@ -367,7 +338,9 @@ export default function EIP7702Page() {
                 </h3>
                 <div className="grid gap-4">
                   {DELEGATEE_CONTRACTS
-                    .filter(contract => contract.address !== '0x0000000000000000000000000000000000000000' || currentDelegation !== '0x')
+                    .filter(contract =>
+                      contract.address !== currentDelegation
+                    )
                     .map((contract, index) => (
                     <div
                       key={index}

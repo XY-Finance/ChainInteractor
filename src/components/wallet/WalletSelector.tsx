@@ -124,11 +124,18 @@ export function WalletSelector() {
                   onClick={() => handleConnectWithKey(key.index)}
                 >
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Key #{key.index}</p>
-                      <p className="text-xs text-gray-600 font-mono">
-                        {key.address}
-                      </p>
+                      <div className="group relative">
+                        <p className="text-xs text-gray-600 font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={key.address}>
+                          {key.address}
+                        </p>
+                        {/* Tooltip for full address */}
+                        <div className="absolute left-0 bottom-full mb-1 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                          {key.address}
+                          <div className="absolute top-full left-4 w-0 h-0 border-l-2 border-r-2 border-t-2 border-b-0 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
                     </div>
                     <Button
                       onClick={(e) => {
@@ -136,6 +143,7 @@ export function WalletSelector() {
                         handleConnectWithKey(key.index)
                       }}
                       size="sm"
+                      className="ml-2 flex-shrink-0"
                     >
                       Connect
                     </Button>
@@ -157,9 +165,16 @@ export function WalletSelector() {
         <div className="space-y-4">
           <div className="p-4 bg-green-50 border border-green-200 rounded-md">
             <h3 className="font-medium text-green-800">Connected</h3>
-            <p className="text-sm text-green-600 mt-1">
-              Address: {currentAccount?.address}
-            </p>
+            <div className="group relative">
+              <p className="text-sm text-green-600 mt-1 overflow-hidden text-ellipsis whitespace-nowrap" title={currentAccount?.address}>
+                Address: {currentAccount?.address}
+              </p>
+              {/* Tooltip for full address */}
+              <div className="absolute left-0 bottom-full mb-1 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                {currentAccount?.address}
+                <div className="absolute top-full left-4 w-0 h-0 border-l-2 border-r-2 border-t-2 border-b-0 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
             <p className="text-sm text-green-600">
               Type: {currentAccount?.type}
             </p>

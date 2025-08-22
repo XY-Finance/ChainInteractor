@@ -200,14 +200,14 @@ export class WalletManager {
   }
 
   // Switch between available wallets
-  async switchWallet(type: WalletType): Promise<WalletAccount> {
+  async switchWallet(type: WalletType, keyIndex?: number): Promise<WalletAccount> {
     // Disconnect current wallet if connected
     if (this.currentWallet) {
       await this.disconnectWallet()
     }
 
-    // Connect to new wallet
-    return await this.connectWallet(type)
+    // Connect to new wallet with optional key index
+    return await this.connectWallet(type, keyIndex)
   }
 
   // Get wallet status

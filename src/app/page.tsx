@@ -1,5 +1,5 @@
-import WalletDemoPage from '../features/wallet-demo/page';
+import { redirect } from 'next/navigation'
 
 export default function HomePage() {
-  return <WalletDemoPage />;
+  redirect('/eip7702')
 }

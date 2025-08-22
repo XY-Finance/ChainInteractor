@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import GlobalWalletManager from './GlobalWalletManager'
 
 export default function Navigation() {
   const pathname = usePathname()
@@ -12,11 +13,21 @@ export default function Navigation() {
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="text-xl font-bold text-gray-900">
+              <Link href="/eip7702" className="text-xl font-bold text-gray-900">
                 EIP-7702 Demo
               </Link>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <Link
+                href="/eip7702"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  pathname === '/eip7702'
+                    ? 'border-purple-500 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                EIP-7702 Authorization
+              </Link>
               <Link
                 href="/"
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
@@ -37,17 +48,12 @@ export default function Navigation() {
               >
                 ZeroDev Demo
               </Link>
-              <Link
-                href="/eip7702"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  pathname === '/eip7702'
-                    ? 'border-purple-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                MetaMask Authorization
-              </Link>
             </div>
+          </div>
+
+          {/* Global Wallet Manager */}
+          <div className="flex items-center">
+            <GlobalWalletManager />
           </div>
         </div>
       </div>
