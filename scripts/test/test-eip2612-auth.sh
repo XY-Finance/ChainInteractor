@@ -54,8 +54,23 @@ EOF
 
 # Sign (EIP-712 hashing handled by cast)
 SIG=$(cast wallet sign --data --from-file permit.json --private-key $KEY2)
-echo $SIG
+echo "SIG=$SIG"
 
 # Optional: split for permit()
-R=0x${SIG:2:64}; S=0x${SIG:66:64}; V=$((16#${SIG:130:2}))
-echo "V=$V"; echo "R=$R"; echo "S=$S"
+# R=0x${SIG:2:64}; S=0x${SIG:66:64}; V=$((16#${SIG:130:2}))
+# echo "V=$V"; echo "R=$R"; echo "S=$S"
+
+# Sign in another way
+DOMAIN_SEPARATOR=$(cast call $TOKEN 'DOMAIN_SEPARATOR()(bytes32)' -r 11155111)
+PERMIT_TYPEHASH=$(cast call $TOKEN 'PERMIT_TYPEHASH()(bytes32)' -r 11155111)
+echo "DOMAIN_SEPARATOR=$DOMAIN_SEPARATOR"
+echo "PERMIT_TYPEHASH=$PERMIT_TYPEHASH"
+
+structHash=$(cast keccak $(cast abi-encode "Permit(bytes32,address,address,uint256,uint256,uint256)" $PERMIT_TYPEHASH $OWNER $SPENDER $VALUE $NONCE $DEADLINE))
+echo "structHash=$structHash"
+
+digest=$(cast keccak $(cast concat-hex 0x1901 $DOMAIN_SEPARATOR $structHash))
+echo "digest=$digest"
+
+SIG=$(cast wallet sign --no-hash --private-key $KEY2 $digest)
+echo "SIG=$SIG"
