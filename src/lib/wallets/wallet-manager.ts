@@ -1,29 +1,43 @@
 import { type WalletInterface, type WalletType, type WalletAccount, type WalletConfig } from '../../types/wallet'
 import { LocalKeyWallet } from './local-key-wallet'
+import { InjectedWallet } from './injected-wallet'
 
 export class WalletManager {
   private wallets: Map<WalletType, WalletInterface> = new Map()
   private currentWallet: WalletInterface | null = null
   private currentAccount: WalletAccount | null = null
+  private stateChangeCallback?: () => void
 
   constructor() {
     // Initialize wallets asynchronously
     this.initializeWallets().catch(console.error)
   }
 
-    private async initializeWallets(): Promise<void> {
-    console.log('🔧 Initializing wallets...')
-    console.log('🔍 Checking if EnvPrivateKeyWallet is available...')
+  // Set callback for state changes
+  setStateChangeCallback(callback: () => void) {
+    this.stateChangeCallback = callback
+  }
 
+  // Notify React context of state changes
+  private notifyStateChange(): void {
+    if (this.stateChangeCallback) {
+      this.stateChangeCallback()
+    }
+  }
+
+  private async initializeWallets(): Promise<void> {
     // Initialize local key wallet
     const isLocalWalletAvailable = await LocalKeyWallet.isAvailable()
     if (isLocalWalletAvailable) {
-      console.log('✅ LocalKeyWallet is available, creating instance...')
       const localWallet = new LocalKeyWallet()
       this.wallets.set('local-key', localWallet)
-      console.log('✅ Local key wallet initialized')
-    } else {
-      console.log('❌ LocalKeyWallet is not available')
+    }
+
+    // Initialize injected wallet (MetaMask)
+    const isInjectedWalletAvailable = await InjectedWallet.isAvailable()
+    if (isInjectedWalletAvailable) {
+      const injectedWallet = new InjectedWallet()
+      this.wallets.set('injected', injectedWallet)
     }
   }
 
@@ -40,12 +54,13 @@ export class WalletManager {
       isAvailable: isLocalWalletAvailable
     })
 
-    // TODO: Add injected wallet config when implemented
+    // Injected wallet (MetaMask)
+    const isInjectedWalletAvailable = await InjectedWallet.isAvailable()
     configs.push({
       type: 'injected',
       name: 'Injected Wallet (MetaMask)',
       description: 'Browser wallet like MetaMask',
-      isAvailable: false // Will be true when implemented
+      isAvailable: isInjectedWalletAvailable
     })
 
     // TODO: Add embedded wallet config when implemented
@@ -78,14 +93,22 @@ export class WalletManager {
         account = await wallet.connect()
       }
 
+      // Set up account change callback for injected wallets
+      if (type === 'injected' && (wallet as any).setAccountChangeCallback) {
+        ;(wallet as any).setAccountChangeCallback((newAccount: WalletAccount | null) => {
+          this.currentAccount = newAccount
+          if (!newAccount) {
+            this.currentWallet = null
+          } else {
+          }
+
+          // Notify React context of state change
+          this.notifyStateChange()
+        })
+      }
+
       this.currentWallet = wallet
       this.currentAccount = account
-
-      console.log(`✅ Connected to ${type} wallet`)
-      console.log(`📍 Address: ${account.address}`)
-      if (account.keyIndex !== undefined) {
-        console.log(`🔑 Key Index: ${account.keyIndex}`)
-      }
 
       return account
     } catch (error) {
@@ -100,7 +123,6 @@ export class WalletManager {
       await this.currentWallet.disconnect()
       this.currentWallet = null
       this.currentAccount = null
-      console.log('🔌 Disconnected from wallet')
     }
   }
 

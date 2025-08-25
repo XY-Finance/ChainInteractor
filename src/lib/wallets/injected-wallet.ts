@@ -16,10 +16,16 @@ import {
 
 export class InjectedWallet extends BaseWallet {
   private ethereum: any = null
+  private onAccountChange?: (account: WalletAccount | null) => void
 
   constructor(chainId: number = sepolia.id) {
     super(chainId)
     this.initializeEthereum()
+  }
+
+  // Set callback for account changes
+  setAccountChangeCallback(callback: (account: WalletAccount | null) => void) {
+    this.onAccountChange = callback
   }
 
   private initializeEthereum(): void {
@@ -83,11 +89,17 @@ export class InjectedWallet extends BaseWallet {
         if (accounts.length === 0) {
           // User disconnected
           this.setAccount(null)
+          if (this.onAccountChange) {
+            this.onAccountChange(null)
+          }
         } else {
           // User switched accounts
           const newAddress = accounts[0] as Address
           const newAccount = this.createAccount(newAddress, 'injected')
           this.setAccount(newAccount)
+          if (this.onAccountChange) {
+            this.onAccountChange(newAccount)
+          }
         }
       })
 

@@ -147,7 +147,7 @@ export abstract class BaseWallet implements WalletInterface {
     this.walletClient = walletClient
   }
 
-  protected setAccount(account: WalletAccount): void {
+  protected setAccount(account: WalletAccount | null): void {
     this.account = account
   }
 

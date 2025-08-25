@@ -66,14 +66,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   // Update state from wallet manager
   const updateState = useCallback(() => {
-    const status = walletManager.getStatus()
-    setIsConnected(status.isConnected)
-    setCurrentAccount(status.currentAddress ? {
-      address: status.currentAddress,
-      type: status.currentWalletType!,
-      isConnected: status.isConnected
-    } : null)
+    const account = walletManager.getCurrentAccount()
+    const connected = walletManager.isConnected()
+
+    setCurrentAccount(account)
+    setIsConnected(connected)
   }, [walletManager])
+
+  // Set up state change callback
+  useEffect(() => {
+    if (!mounted) return
+
+    walletManager.setStateChangeCallback(() => {
+      updateState()
+    })
+  }, [walletManager, mounted])
 
   // Connect to wallet
   const connectWallet = useCallback(async (type: WalletType, keyIndex?: number) => {

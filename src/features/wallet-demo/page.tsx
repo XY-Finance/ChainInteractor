@@ -35,13 +35,14 @@ export default function WalletDemoPage() {
 
           <div className="bg-gray-50 p-6 rounded-lg">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              🌐 Injected Wallet (Coming Soon)
+              🌐 Injected Wallet (MetaMask)
             </h3>
             <ul className="text-sm text-gray-700 space-y-2">
               <li>• MetaMask integration</li>
               <li>• Browser wallet support</li>
               <li>• EIP-7702 with personal_sign</li>
               <li>• User-friendly interface</li>
+              <li>• EIP-712 typed data signing</li>
             </ul>
           </div>
 
