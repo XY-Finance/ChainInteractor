@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../styles/globals.css";
-import '@rainbow-me/rainbowkit/styles.css';
 import { Providers } from '../lib/providers';
 import Navigation from '../components/layout/Navigation';
 import { ClientWrapper } from '../components/layout/ClientWrapper';
