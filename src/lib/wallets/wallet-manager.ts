@@ -149,6 +149,13 @@ export class WalletManager {
     return await this.currentWallet.signMessage(message)
   }
 
+  async signTypedData(domain: any, types: any, message: any) {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+    return await this.currentWallet.signTypedData(domain, types, message)
+  }
+
   async sendTransaction(transaction: any) {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')

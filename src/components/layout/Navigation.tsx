@@ -39,6 +39,16 @@ export default function Navigation() {
                 Modular Wallet System
               </Link>
               <Link
+                href="/wallet-actions"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                  pathname === '/wallet-actions'
+                    ? 'border-orange-500 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Wallet Actions
+              </Link>
+              <Link
                 href="/zerodev"
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                   pathname === '/zerodev'

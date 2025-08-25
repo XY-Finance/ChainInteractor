@@ -9,20 +9,9 @@ export async function POST(request: Request) {
   try {
     const { operation, keyIndex, message, transaction } = await request.json()
 
-    const privateKeysEnv = process.env.PRIVATE_KEYS
-    if (!privateKeysEnv) {
-      return NextResponse.json({ error: 'No private keys configured' }, { status: 400 })
-    }
-
-    const privateKeyStrings = privateKeysEnv.split(/\s+/).filter(key => key.trim() !== '')
-
-    if (keyIndex < 0 || keyIndex >= privateKeyStrings.length) {
-      return NextResponse.json({ error: 'Invalid key index' }, { status: 400 })
-    }
-
-    const privateKey = privateKeyStrings[keyIndex].trim()
-    if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
-      return NextResponse.json({ error: 'Invalid private key format' }, { status: 400 })
+    const privateKey = await getPrivateKeyByIndex(keyIndex)
+    if (!privateKey) {
+      return NextResponse.json({ error: 'Invalid key index or no private keys configured' }, { status: 400 })
     }
 
     const account = privateKeyToAccount(privateKey as `0x${string}`)
@@ -42,6 +31,19 @@ export async function POST(request: Request) {
           message: message
         })
         return NextResponse.json({ signature })
+
+      case 'signTypedData':
+        if (!message || !message.domain || !message.types || !message.primaryType) {
+          return NextResponse.json({ error: 'Typed data required with domain, types, and primaryType' }, { status: 400 })
+        }
+        // Use viem's signTypedData function directly with the private key
+        const typedDataSignature = await walletClient.signTypedData({
+          domain: message.domain,
+          types: message.types,
+          primaryType: message.primaryType,
+          message: message.message
+        })
+        return NextResponse.json({ signature: typedDataSignature })
 
       case 'sign7702Authorization':
         if (!message) {
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
 
         try {
           // Parse the authorization from JSON string
-          const authorization =message
+          const authorization = message
 
           authorization.v = BigInt(authorization.v)
 
@@ -176,4 +178,35 @@ export async function POST(request: Request) {
     console.error('Wallet operation error:', error)
     return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
   }
+}
+
+async function getPrivateKeyByIndex(keyIndex: number): Promise<string | null> {
+  // First, try to get all private keys in order
+  const allPrivateKeys = await getAllPrivateKeys()
+
+  if (keyIndex < 0 || keyIndex >= allPrivateKeys.length) {
+    return null
+  }
+
+  return allPrivateKeys[keyIndex]
+}
+
+async function getAllPrivateKeys(): Promise<string[]> {
+  const allKeys: string[] = []
+
+  // Only use PRIVATE_KEYS format
+  const privateKeys = process.env.PRIVATE_KEYS
+  if (!privateKeys) {
+    return allKeys
+  }
+
+  const privateKeyStrings = privateKeys.split(/\s+/).filter(key => key.trim() !== '')
+  for (const keyString of privateKeyStrings) {
+    const privateKey = keyString.trim()
+    if (privateKey.startsWith('0x') && privateKey.length === 66) {
+      allKeys.push(privateKey)
+    }
+  }
+
+  return allKeys
 }

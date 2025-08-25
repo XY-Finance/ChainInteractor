@@ -87,6 +87,38 @@ export class LocalKeyWallet extends BaseWallet {
     return data.signature
   }
 
+  // Override signTypedData to use server API (private keys stay on server)
+  async signTypedData(domain: any, types: any, message: any): Promise<Hex> {
+    const account = await this.getAccount()
+    if (!account) {
+      throw new Error('No account connected')
+    }
+
+    // Use server API for signing typed data (private keys stay on server)
+    const response = await fetch('/api/wallet-operations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: 'signTypedData',
+        keyIndex: account.keyIndex,
+        message: {
+          domain,
+          types,
+          primaryType: types.Permit ? 'Permit' : 'Message',
+          message
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to sign typed data')
+    }
+
+    const data = await response.json()
+    return data.signature
+  }
+
   async connect(): Promise<WalletAccount> {
     if (this.availableKeys.length === 0) {
       throw new Error('Environment private key wallet is unavailable. No valid private keys found in PRIVATE_KEYS environment variable.')
@@ -155,7 +187,7 @@ export class LocalKeyWallet extends BaseWallet {
   }
 
     // Override EIP-7702 methods for better implementation
-  async sign7702Authorization(authorizationData: any): Promise<Hex> {
+  async sign7702Authorization(authorizationData: any): Promise<any> {
     const account = await this.getAccount()
     if (!account) {
       throw new Error('No account connected')

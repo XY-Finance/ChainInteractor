@@ -56,6 +56,25 @@ export abstract class BaseWallet implements WalletInterface {
     })
   }
 
+  async signTypedData(domain: any, types: any, message: any): Promise<Hex> {
+    if (!this.walletClient) {
+      throw new Error('Wallet client not initialized')
+    }
+
+    const account = await this.getAccount()
+    if (!account) {
+      throw new Error('No account connected')
+    }
+
+    return await this.walletClient.signTypedData({
+      account: account.address,
+      domain,
+      types,
+      primaryType: types.EIP712Domain ? Object.keys(types).find(key => key !== 'EIP712Domain') : Object.keys(types)[0],
+      message
+    })
+  }
+
   async sendTransaction(transaction: unknown): Promise<Hex> {
     if (!this.walletClient) {
       throw new Error('Wallet client not initialized')

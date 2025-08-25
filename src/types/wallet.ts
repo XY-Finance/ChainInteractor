@@ -34,6 +34,7 @@ export interface WalletInterface {
 
   // Transaction methods
   signMessage(message: string): Promise<Hex>
+  signTypedData(domain: any, types: any, message: any): Promise<Hex>
   sendTransaction(transaction: unknown): Promise<Hex>
 
   // EIP-7702 specific methods

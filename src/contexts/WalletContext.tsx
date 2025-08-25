@@ -18,6 +18,7 @@ interface WalletContextType {
   disconnectWallet: () => Promise<void>
   switchWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
   signMessage: (message: string) => Promise<any>
+  signTypedData: (domain: any, types: any, message: any) => Promise<any>
   sendTransaction: (transaction: any) => Promise<any>
   sign7702Authorization: (authorizationData: any) => Promise<any>
   submit7702Authorization: (signedAuthorization: any) => Promise<any>
@@ -140,6 +141,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return await walletManager.signMessage(message)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to sign message'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [walletManager, isConnected])
+
+  const signTypedData = useCallback(async (domain: any, types: any, message: any) => {
+    if (!isConnected) {
+      throw new Error('No wallet connected')
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      return await walletManager.signTypedData(domain, types, message)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign typed data'
       setError(errorMessage)
       throw err
     } finally {
@@ -284,6 +304,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     disconnectWallet,
     switchWallet,
     signMessage,
+    signTypedData,
     sendTransaction,
     sign7702Authorization,
     submit7702Authorization,

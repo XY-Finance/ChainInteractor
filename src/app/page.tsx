@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation'
+import WalletDemoPage from '../features/wallet-demo/page'
 
 export default function HomePage() {
-  redirect('/eip7702')
+  return <WalletDemoPage />
 }

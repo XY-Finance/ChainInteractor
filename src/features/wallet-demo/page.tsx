@@ -25,7 +25,8 @@ export default function WalletDemoPage() {
             </h3>
             <ul className="text-sm text-blue-800 space-y-2">
               <li>• Reads multiple private keys from .env file</li>
-              <li>• Quoted space-separated format: PRIVATE_KEYS=&quot;0x111... 0x222...&quot;</li>
+              <li>• Supports legacy format: PRIVATE_KEYS=&quot;0x111... 0x222...&quot;</li>
+              <li>• Supports dynamic format: KEY0, KEY1, KEY2, etc.</li>
               <li>• Full EIP-7702 support</li>
               <li>• Smart account creation</li>
               <li>• Transaction signing and sending</li>
@@ -78,8 +79,13 @@ export default function WalletDemoPage() {
             <p>To test the local private key wallet:</p>
             <ol className="list-decimal list-inside ml-4 space-y-1">
               <li>Create a <code className="bg-yellow-100 px-1 rounded">.env.local</code> file in the project root</li>
-              <li>Add your test private keys using quoted space-separated format:</li>
-              <li className="ml-4"><code className="bg-yellow-100 px-1 rounded">PRIVATE_KEYS=&quot;0x111...111 0x222...222 0x333...333&quot;</code></li>
+              <li>Add your test private keys using one of these formats:</li>
+              <li className="ml-4">
+                <strong>Legacy format:</strong> <code className="bg-yellow-100 px-1 rounded">PRIVATE_KEYS=&quot;0x111...111 0x222...222 0x333...333&quot;</code>
+              </li>
+              <li className="ml-4">
+                <strong>New format:</strong> <code className="bg-yellow-100 px-1 rounded">KEY0=0x111...111</code>, <code className="bg-yellow-100 px-1 rounded">KEY1=0x222...222</code>, etc.
+              </li>
               <li>Make sure you have some Sepolia test ETH</li>
               <li>Connect your wallet below and start testing!</li>
             </ol>

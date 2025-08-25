@@ -2,39 +2,49 @@ import { NextResponse } from 'next/server'
 import { privateKeyToAccount } from 'viem/accounts'
 
 export async function GET() {
-  const privateKeysEnv = process.env.PRIVATE_KEYS
+  const keys = await getAllPrivateKeys()
 
-  if (!privateKeysEnv) {
-    return NextResponse.json({ keys: [] })
+  // Debug logging
+  console.log('🔍 Generated addresses:', keys.map(k => `${k.index}: ${k.address}`))
+
+  return NextResponse.json({ keys })
+}
+
+async function getAllPrivateKeys(): Promise<Array<{ index: number; address: string }>> {
+  const allKeys: Array<{ index: number; address: string }> = []
+  let currentIndex = 0
+
+  // Only use PRIVATE_KEYS format
+  const privateKeys = process.env.PRIVATE_KEYS
+  if (!privateKeys) {
+    console.log('❌ No PRIVATE_KEYS environment variable found')
+    return allKeys
   }
 
-  // Parse multiple private keys from PRIVATE_KEYS env var
-  // Format: PRIVATE_KEYS="0x111...111 0x222...222 0x333...333"
-  const privateKeyStrings = privateKeysEnv.split(/\s+/).filter(key => key.trim() !== '')
+  console.log('🔍 Using PRIVATE_KEYS format')
+  const privateKeyStrings = privateKeys.split(/\s+/).filter(key => key.trim() !== '')
 
-  if (privateKeyStrings.length === 0) {
-    return NextResponse.json({ keys: [] })
-  }
-
-  const keys = privateKeyStrings.map((keyString, index) => {
+  for (const keyString of privateKeyStrings) {
     const privateKey = keyString.trim()
 
     if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
-      console.log(`⚠️ Invalid private key format at index ${index}: "${privateKey}". Skipping this key.`)
-      return null
+      console.log(`⚠️ Invalid private key format at index ${currentIndex}: "${privateKey}". Skipping this key.`)
+      currentIndex++
+      continue
     }
 
     try {
       const account = privateKeyToAccount(privateKey as `0x${string}`)
-      return {
-        index,
+      allKeys.push({
+        index: currentIndex,
         address: account.address
-      }
+      })
+      console.log(`✅ Processed key ${currentIndex}: ${account.address}`)
     } catch (error) {
-      console.error(`❌ Failed to process private key at index ${index}:`, error)
-      return null
+      console.error(`❌ Failed to process private key at index ${currentIndex}:`, error)
     }
-  }).filter(key => key !== null)
+    currentIndex++
+  }
 
-  return NextResponse.json({ keys })
+  return allKeys
 }
