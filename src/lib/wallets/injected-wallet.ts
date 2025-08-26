@@ -10,6 +10,17 @@ import { type Address, type Hex } from 'viem'
 import { type DelegateeContract } from '../../types'
 import { addresses } from '../../config/addresses'
 
+// Supported networks configuration - Only Sepolia enabled
+const SUPPORTED_NETWORKS = [
+  {
+    chainId: sepolia.id,
+    name: 'Sepolia Testnet',
+    isSupported: true,
+    isDefault: true,
+    chain: sepolia
+  }
+]
+
 export class InjectedWallet extends BaseWallet {
   private ethereum: any
   private onAccountChange?: (account: WalletAccount | null) => void
@@ -312,5 +323,45 @@ export class InjectedWallet extends BaseWallet {
 
   setAccountChangeCallback(callback: (account: WalletAccount | null) => void): void {
     this.onAccountChange = callback
+  }
+
+  // Network detection methods - Only Sepolia supported
+  async getCurrentChainId(): Promise<number> {
+    return sepolia.id
+  }
+
+  getCurrentNetwork(): { chainId: number; name: string; isSupported: boolean } {
+    return {
+      chainId: sepolia.id,
+      name: 'Sepolia Testnet',
+      isSupported: true
+    }
+  }
+
+  getSupportedNetworks() {
+    return SUPPORTED_NETWORKS
+  }
+
+  getDefaultNetwork() {
+    return SUPPORTED_NETWORKS[0]
+  }
+
+  // Network switching methods - Only Sepolia supported
+  async switchNetwork(chainId: number): Promise<void> {
+    if (chainId !== sepolia.id) {
+      throw new Error('Only Sepolia network is supported')
+    }
+    // No action needed since we only support Sepolia
+  }
+
+  async addNetwork(chainId: number): Promise<void> {
+    if (chainId !== sepolia.id) {
+      throw new Error('Only Sepolia network is supported')
+    }
+    // No action needed since we only support Sepolia
+  }
+
+  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
+    // No network changes supported since we only use Sepolia
   }
 }

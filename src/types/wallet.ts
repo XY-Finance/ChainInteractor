@@ -34,6 +34,17 @@ export interface WalletInterface {
   getAvailableKeys?(): Promise<LocalKeyInfo[]> // For local key wallets
   getWalletType(): WalletType
 
+  // Network detection methods
+  getCurrentChainId?(): Promise<number>
+  getCurrentNetwork?(): { chainId: number; name: string; isSupported: boolean }
+
+  // Network switching methods
+  switchNetwork?(chainId: number): Promise<void>
+  addNetwork?(chainId: number): Promise<void>
+  getSupportedNetworks?(): Array<{ chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any }>
+  getDefaultNetwork?(): { chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any }
+  setNetworkChangeCallback?(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void
+
   // Transaction methods
   signMessage(message: string): Promise<Hex>
   signTypedData(domain: any, types: any, message: any): Promise<Hex>

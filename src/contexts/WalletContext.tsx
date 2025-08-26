@@ -35,6 +35,17 @@ interface WalletContextType {
   getWalletClient: () => any
   clearError: () => void
 
+  // Network detection
+  getCurrentChainId: () => Promise<number | null>
+  getCurrentNetwork: () => { chainId: number; name: string; isSupported: boolean } | null
+
+  // Network switching
+  switchNetwork: (chainId: number) => Promise<void>
+  addNetwork: (chainId: number) => Promise<void>
+  getSupportedNetworks: () => Array<{ chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any }>
+  getDefaultNetwork: () => { chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any } | null
+  setNetworkChangeCallback: (callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => void
+
   // Utility
   walletManager: WalletManager
 }
@@ -334,6 +345,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getDelegateeOptions: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptions(currentDelegations, options),
     getDelegateeSupportInfo: (delegateeAddress: string) => walletManager.getDelegateeSupportInfo(delegateeAddress),
     getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptionsWithReasons(currentDelegations, options),
+
+    // Network detection
+    getCurrentChainId: () => walletManager.getCurrentChainId(),
+    getCurrentNetwork: () => walletManager.getCurrentNetwork(),
+
+    // Network switching
+    switchNetwork: (chainId: number) => walletManager.switchNetwork(chainId),
+    addNetwork: (chainId: number) => walletManager.addNetwork(chainId),
+    getSupportedNetworks: () => walletManager.getSupportedNetworks(),
+    getDefaultNetwork: () => walletManager.getDefaultNetwork(),
+    setNetworkChangeCallback: (callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => walletManager.setNetworkChangeCallback(callback),
 
     // Utility
     walletManager

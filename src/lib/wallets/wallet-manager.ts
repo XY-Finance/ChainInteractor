@@ -2,6 +2,7 @@ import { type WalletInterface, type WalletType, type WalletAccount, type WalletC
 import { LocalKeyWallet } from './local-key-wallet'
 import { InjectedWallet } from './injected-wallet'
 import { type DelegateeContract } from '../../types'
+import { sepolia } from 'viem/chains'
 
 export class WalletManager {
   private wallets: Map<WalletType, WalletInterface> = new Map()
@@ -339,6 +340,117 @@ export class WalletManager {
       currentAddress: this.currentAccount?.address || null,
       capabilities: this.getCapabilities(),
       availableWallets: this.getAvailableWallets()
+    }
+  }
+
+  // Network detection methods
+  async getCurrentChainId(): Promise<number | null> {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentChainId === 'function') {
+      try {
+        return await this.currentWallet.getCurrentChainId()
+      } catch (error) {
+        console.error('Failed to get current chain ID:', error)
+        return null
+      }
+    }
+
+    // Fallback to default chain ID for wallets that don't support network detection
+    return sepolia.id
+  }
+
+  getCurrentNetwork(): { chainId: number; name: string; isSupported: boolean } | null {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentNetwork === 'function') {
+      return this.currentWallet.getCurrentNetwork()
+    }
+
+    // Fallback to default network for wallets that don't support network detection
+    return {
+      chainId: sepolia.id,
+      name: 'Sepolia Testnet',
+      isSupported: true
+    }
+  }
+
+  // Network switching methods
+  async switchNetwork(chainId: number): Promise<void> {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+
+    if (typeof this.currentWallet.switchNetwork === 'function') {
+      await this.currentWallet.switchNetwork(chainId)
+    } else {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support network switching`)
+    }
+  }
+
+  async addNetwork(chainId: number): Promise<void> {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+
+    if (typeof this.currentWallet.addNetwork === 'function') {
+      await this.currentWallet.addNetwork(chainId)
+    } else {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support adding networks`)
+    }
+  }
+
+  getSupportedNetworks(): Array<{ chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any }> {
+    if (!this.currentWallet) {
+      return []
+    }
+
+    if (typeof this.currentWallet.getSupportedNetworks === 'function') {
+      return this.currentWallet.getSupportedNetworks()
+    }
+
+    // Fallback to default networks for wallets that don't support network listing
+    return [
+      {
+        chainId: sepolia.id,
+        name: 'Sepolia Testnet',
+        isSupported: true,
+        isDefault: true,
+        chain: sepolia
+      }
+    ]
+  }
+
+  getDefaultNetwork(): { chainId: number; name: string; isSupported: boolean; isDefault: boolean; chain: any } | null {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getDefaultNetwork === 'function') {
+      return this.currentWallet.getDefaultNetwork()
+    }
+
+    // Fallback to default network for wallets that don't support network listing
+    return {
+      chainId: sepolia.id,
+      name: 'Sepolia Testnet',
+      isSupported: true,
+      isDefault: true,
+      chain: sepolia
+    }
+  }
+
+  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
+    if (!this.currentWallet) {
+      return
+    }
+
+    if (typeof this.currentWallet.setNetworkChangeCallback === 'function') {
+      this.currentWallet.setNetworkChangeCallback(callback)
     }
   }
 }
