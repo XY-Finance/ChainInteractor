@@ -42,7 +42,7 @@ const DELEGATEE_CONTRACTS: DelegateeContract[] = [
 ]
 
 export default function EIP7702Page() {
-  const { isConnected, currentAccount, signMessage, sign7702Authorization, submit7702Authorization } = useWalletManager()
+  const { isConnected, currentAccount, signMessage, sign7702Authorization, submit7702Authorization, getAvailableDelegatees, getDelegateeOptions, getDelegateeOptionsWithReasons } = useWalletManager()
   const publicClient = usePublicClient()
 
   const address = currentAccount?.address
@@ -111,7 +111,7 @@ export default function EIP7702Page() {
         addLog('📋 Current delegation: None (no delegation)')
       } else if (code.startsWith('0xef0100')) {
         // Extract the contract address by trimming the 0xef0100 prefix
-        const contractAddress = '0x' + code.slice(8) // Remove '0xef0100' (8 characters)
+        const contractAddress = '0x' + code.slice(8) // Remove '0xef0100' prefix (slice from position 8)
         setCurrentDelegation(contractAddress)
         addLog(`📋 Current delegation: Contract ${contractAddress}`)
       } else {
@@ -240,15 +240,19 @@ export default function EIP7702Page() {
     const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === '0x0000000000000000000000000000000000000000'
     setIsSubmitting(true)
     addLog(`📤 Submitting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} to blockchain...`)
+    console.log('🔧 submitAuthorization called with signedAuthorization:', signedAuthorization)
 
     try {
       // Use our wallet system's submit7702Authorization method
+      console.log('📤 Calling submit7702Authorization...')
       const hash = await submit7702Authorization(signedAuthorization)
+      console.log('✅ submit7702Authorization returned hash:', hash)
 
       setTransactionHash(hash)
       addLog(`✅ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} submitted successfully`)
       addLog(`📝 Transaction hash: ${hash}`)
     } catch (error) {
+      console.error('❌ Error in submitAuthorization:', error)
       addLog(`❌ EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} submission failed: ${error}`)
     } finally {
       setIsSubmitting(false)
@@ -337,19 +341,18 @@ export default function EIP7702Page() {
                   Select Action
                 </h3>
                 <div className="grid gap-4">
-                  {DELEGATEE_CONTRACTS
-                    .filter(contract =>
-                      contract.address !== currentDelegation
-                    )
+                  {getDelegateeOptionsWithReasons(currentDelegation, DELEGATEE_CONTRACTS)
                     .map((contract, index) => (
                     <div
                       key={index}
-                      className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                        selectedContract?.name === contract.name
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                      className={`border rounded-lg p-4 transition-colors ${
+                        !contract.isSupported
+                          ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                          : selectedContract?.name === contract.name
+                          ? 'border-blue-500 bg-blue-50 cursor-pointer'
+                          : 'border-gray-200 hover:border-gray-300 cursor-pointer'
                       }`}
-                      onClick={() => setSelectedContract(contract)}
+                      onClick={() => contract.isSupported && setSelectedContract(contract)}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -358,6 +361,11 @@ export default function EIP7702Page() {
                           </h4>
                           <p className="text-sm text-gray-600 mt-1">
                             {contract.description}
+                            {!contract.isSupported && contract.reason && (
+                              <span className="block text-xs text-red-600 mt-1">
+                                ⚠️ {contract.reason}
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-gray-500 font-mono mt-2 break-all">
                             {contract.address}
@@ -366,6 +374,11 @@ export default function EIP7702Page() {
                         {contract.address === '0x0000000000000000000000000000000000000000' && (
                           <div className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">
                             Revoke
+                          </div>
+                        )}
+                        {!contract.isSupported && (
+                          <div className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-medium">
+                            {contract.reason || 'Not Supported'}
                           </div>
                         )}
                       </div>

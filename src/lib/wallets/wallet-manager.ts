@@ -1,6 +1,7 @@
-import { type WalletInterface, type WalletType, type WalletAccount, type WalletConfig } from '../../types/wallet'
+import { type WalletInterface, type WalletType, type WalletAccount, type WalletConfig, type WalletCapabilities } from '../../types/wallet'
 import { LocalKeyWallet } from './local-key-wallet'
 import { InjectedWallet } from './injected-wallet'
+import { type DelegateeContract } from '../../types'
 
 export class WalletManager {
   private wallets: Map<WalletType, WalletInterface> = new Map()
@@ -149,6 +150,15 @@ export class WalletManager {
     return this.currentWallet.getCapabilities()
   }
 
+  // Helper method to check if current wallet supports a specific operation
+  supportsOperation(operation: keyof WalletCapabilities): boolean {
+    if (!this.currentWallet) {
+      return false
+    }
+    const capabilities = this.currentWallet.getCapabilities()
+    return capabilities[operation] || false
+  }
+
     // Get available keys for local key wallet
   async getAvailableKeys() {
     const localWallet = this.wallets.get('local-key')
@@ -185,10 +195,17 @@ export class WalletManager {
     return await this.currentWallet.sendTransaction(transaction)
   }
 
+
+
   async sign7702Authorization(authorizationData: any) {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
+
+    if (typeof this.currentWallet.sign7702Authorization !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support EIP-7702 authorization signing`)
+    }
+
     return await this.currentWallet.sign7702Authorization(authorizationData)
   }
 
@@ -196,13 +213,83 @@ export class WalletManager {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
+
+    if (typeof this.currentWallet.submit7702Authorization !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support EIP-7702 authorization submission`)
+    }
+
     return await this.currentWallet.submit7702Authorization(signedAuthorization)
+  }
+
+  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+
+    if (typeof this.currentWallet.getAvailableDelegatees !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee filtering`)
+    }
+
+    return this.currentWallet.getAvailableDelegatees(currentDelegations, options)
+  }
+
+  isDelegateeSupported(delegateeAddress: string): boolean {
+    if (!this.currentWallet) {
+      return false
+    }
+
+    if (typeof this.currentWallet.isDelegateeSupported !== 'function') {
+      return true // Default to supported if method doesn't exist
+    }
+
+    return this.currentWallet.isDelegateeSupported(delegateeAddress)
+  }
+
+  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+
+    if (typeof this.currentWallet.getDelegateeOptions !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee options`)
+    }
+
+    return this.currentWallet.getDelegateeOptions(currentDelegations, options)
+  }
+
+  getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
+    if (!this.currentWallet) {
+      return { isSupported: false, reason: 'No wallet connected' }
+    }
+
+    if (typeof this.currentWallet.getDelegateeSupportInfo !== 'function') {
+      return { isSupported: true } // Default to supported if method doesn't exist
+    }
+
+    return this.currentWallet.getDelegateeSupportInfo(delegateeAddress)
+  }
+
+  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+
+    if (typeof this.currentWallet.getDelegateeOptionsWithReasons !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee options with reasons`)
+    }
+
+    return this.currentWallet.getDelegateeOptionsWithReasons(currentDelegations, options)
   }
 
   async createSmartAccount() {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
+
+    if (typeof this.currentWallet.createSmartAccount !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support smart account creation`)
+    }
+
     return await this.currentWallet.createSmartAccount()
   }
 
@@ -210,6 +297,11 @@ export class WalletManager {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
+
+    if (typeof this.currentWallet.sendUserOperation !== 'function') {
+      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support user operations`)
+    }
+
     return await this.currentWallet.sendUserOperation(userOp)
   }
 

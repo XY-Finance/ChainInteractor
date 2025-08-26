@@ -14,6 +14,7 @@ import {
   type WalletInterface,
   type WalletType
 } from '../../types/wallet'
+import { type DelegateeContract } from '../../types'
 
 export abstract class BaseWallet implements WalletInterface {
   protected publicClient: PublicClient
@@ -66,11 +67,16 @@ export abstract class BaseWallet implements WalletInterface {
       throw new Error('No account connected')
     }
 
+    const primaryType = types.EIP712Domain ? Object.keys(types).find(key => key !== 'EIP712Domain') : Object.keys(types)[0]
+    if (!primaryType) {
+      throw new Error('No valid primary type found in types')
+    }
+
     return await this.walletClient.signTypedData({
       account: account.address,
       domain,
       types,
-      primaryType: types.EIP712Domain ? Object.keys(types).find(key => key !== 'EIP712Domain') : Object.keys(types)[0],
+      primaryType,
       message
     })
   }
@@ -113,20 +119,57 @@ export abstract class BaseWallet implements WalletInterface {
   }
 
   async submit7702Authorization(signedAuthorization: Hex): Promise<Hex> {
-    // This is a placeholder - actual implementation depends on the specific wallet
-    // For now, we'll just return a dummy transaction hash
-    console.log('Submitting 7702 authorization:', signedAuthorization)
-    return '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex
+    // This method must be implemented by specific wallet types
+    throw new Error('submit7702Authorization not implemented for this wallet type')
+  }
+
+  // Delegatee filtering method
+  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+    return options.filter(contract => contract.address.toLowerCase() !== currentDelegations.toLowerCase())
+  }
+
+  // Check if a specific delegatee is supported by this wallet
+  isDelegateeSupported(delegateeAddress: string): boolean {
+    // Base implementation - all delegatees are supported
+    // Override in specific wallet implementations (e.g., MetaMask)
+    return true
+  }
+
+  // Get delegatee options with support information
+  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
+    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    return availableOptions.map(contract => ({
+      ...contract,
+      isSupported: this.isDelegateeSupported(contract.address)
+    }))
+  }
+
+  // Get detailed support information for a delegatee
+  getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
+    const isSupported = this.isDelegateeSupported(delegateeAddress)
+    return {
+      isSupported,
+      reason: isSupported ? undefined : 'This wallet type does not support this delegatee'
+    }
+  }
+
+  // Get delegatee options with detailed support information
+  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    return availableOptions.map(contract => ({
+      ...contract,
+      ...this.getDelegateeSupportInfo(contract.address)
+    }))
   }
 
   // Smart account methods
   async createSmartAccount(): Promise<Address> {
-    // This will be implemented by specific wallet types
+    // This method must be implemented by specific wallet types
     throw new Error('createSmartAccount not implemented for this wallet type')
   }
 
   async sendUserOperation(userOp: any): Promise<Hex> {
-    // This will be implemented by specific wallet types
+    // This method must be implemented by specific wallet types
     throw new Error('sendUserOperation not implemented for this wallet type')
   }
 

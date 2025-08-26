@@ -22,6 +22,12 @@ interface WalletContextType {
   sendTransaction: (transaction: any) => Promise<any>
   sign7702Authorization: (authorizationData: any) => Promise<any>
   submit7702Authorization: (signedAuthorization: any) => Promise<any>
+  getAvailableDelegatees: (currentDelegations: string, options: any[]) => any[]
+  isDelegateeSupported: (delegateeAddress: string) => boolean
+  getDelegateeOptions: (currentDelegations: string, options: any[]) => any[]
+  getDelegateeSupportInfo: (delegateeAddress: string) => { isSupported: boolean; reason?: string }
+  getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => Array<any & { isSupported: boolean; reason?: string }>
+
   createSmartAccount: () => Promise<any>
   sendUserOperation: (userOp: any) => Promise<any>
   getAvailableKeys: () => Promise<any>
@@ -212,6 +218,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
+
+
   const submit7702Authorization = useCallback(async (signedAuthorization: any) => {
     if (!isConnected) {
       throw new Error('No wallet connected')
@@ -321,6 +329,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getPublicClient,
     getWalletClient,
     clearError,
+    getAvailableDelegatees: (currentDelegations: string, options: any[]) => walletManager.getAvailableDelegatees(currentDelegations, options),
+    isDelegateeSupported: (delegateeAddress: string) => walletManager.isDelegateeSupported(delegateeAddress),
+    getDelegateeOptions: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptions(currentDelegations, options),
+    getDelegateeSupportInfo: (delegateeAddress: string) => walletManager.getDelegateeSupportInfo(delegateeAddress),
+    getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptionsWithReasons(currentDelegations, options),
 
     // Utility
     walletManager

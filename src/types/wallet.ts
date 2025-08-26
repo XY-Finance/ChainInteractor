@@ -1,4 +1,5 @@
 import { type Address, type Hex, type PublicClient, type WalletClient } from 'viem'
+import { type DelegateeContract } from './index'
 
 export type WalletType = 'local-key' | 'injected' | 'embedded'
 
@@ -31,6 +32,7 @@ export interface WalletInterface {
   getAccount(): Promise<WalletAccount | null>
   getCapabilities(): WalletCapabilities
   getAvailableKeys?(): Promise<LocalKeyInfo[]> // For local key wallets
+  getWalletType(): WalletType
 
   // Transaction methods
   signMessage(message: string): Promise<Hex>
@@ -40,6 +42,11 @@ export interface WalletInterface {
   // EIP-7702 specific methods
   sign7702Authorization(authorizationData: unknown): Promise<any> // Returns authorization + verification data
   submit7702Authorization(signedAuthorization: any): Promise<Hex>
+  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[]
+  isDelegateeSupported(delegateeAddress: string): boolean
+  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }>
+  getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string }
+  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
 
   // Smart account methods
   createSmartAccount(): Promise<Address>
