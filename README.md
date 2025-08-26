@@ -8,32 +8,54 @@ A Next.js application demonstrating EIP-7702 smart account functionality using b
 src/
 ├── app/                    # Next.js App Router pages
 │   ├── layout.tsx         # Root layout
-│   ├── page.tsx           # Home page (ZeroDev demo)
-│   └── eip7702/           # EIP-7702 route
-│       └── page.tsx       # MetaMask authorization page
+│   ├── page.tsx           # Home page (redirects to EIP-7702)
+│   ├── eip7702/           # EIP-7702 route
+│   │   └── page.tsx       # MetaMask authorization page
+│   ├── wallet-actions/    # Wallet operations route
+│   │   └── page.tsx       # Wallet actions page
+│   └── zerodev/           # ZeroDev route
+│       └── page.tsx       # ZeroDev demo page
 ├── components/            # Reusable UI components
 │   ├── ui/               # Basic UI components
 │   ├── layout/           # Layout components
-│   │   └── Navigation.tsx
-│   └── features/         # Feature-specific components
+│   │   ├── Navigation.tsx
+│   │   ├── GlobalWalletManager.tsx
+│   │   └── ClientWrapper.tsx
+│   └── wallet/           # Wallet-specific components
+│       ├── WalletSelector.tsx
+│       ├── WalletOperations.tsx
+│       └── index.ts
 ├── features/             # Feature modules
 │   ├── eip7702/         # EIP-7702 MetaMask implementation
 │   │   └── page.tsx
+│   ├── wallet-actions/  # Wallet operations
+│   │   └── page.tsx
+│   ├── wallet-demo/     # Wallet demo (legacy)
+│   │   └── page.tsx
 │   └── zerodev/         # ZeroDev implementation
 │       └── page.tsx
-├── lib/                  # Third-party library configurations
-│   └── providers.tsx     # Wagmi providers
+├── lib/                  # Library configurations
+│   ├── providers.tsx     # Wagmi providers
+│   └── wallets/          # Modular wallet system
+│       ├── base-wallet.ts
+│       ├── local-key-wallet.ts
+│       ├── injected-wallet.ts
+│       └── wallet-manager.ts
 ├── hooks/                # Custom React hooks
-│   └── useEIP7702.ts     # EIP-7702 business logic
+│   ├── useEIP7702.ts     # EIP-7702 business logic
+│   └── useWalletManager.ts # Wallet management hook
 ├── types/                # TypeScript type definitions
-│   └── index.ts
+│   ├── index.ts
+│   └── wallet.ts         # Wallet type definitions
 ├── utils/                # Utility functions
 │   └── index.ts
 ├── config/               # Configuration files
 │   ├── config.ts         # Wagmi configuration
-│   └── eip7702.ts        # EIP-7702 settings
+│   ├── eip7702.ts        # EIP-7702 settings
+│   └── addresses.ts      # Contract addresses
 └── styles/               # Global styles
     └── globals.css
+```
 
 scripts/                  # Command-line scripts
 ├── demo/                 # Demo scripts
@@ -51,6 +73,28 @@ docs/                     # Documentation
 ```
 
 ## 🚀 Features
+
+### Modular Wallet System
+- 🔑 **Local Private Key Wallet**: Environment-based private key management
+  - Supports multiple private keys from `.env` file
+  - Legacy format: `PRIVATE_KEYS="0x111... 0x222... 0x333..."`
+  - Dynamic format: `KEY0=0x111...`, `KEY1=0x222...`, etc.
+  - Full EIP-7702 support with authorization signing
+  - Smart account creation and user operation sending
+- 🌐 **Injected Wallet (MetaMask)**: Browser wallet integration
+  - MetaMask and other injected wallet support
+  - EIP-7702 with personal_sign implementation
+  - EIP-712 typed data signing
+  - User-friendly interface
+- 🔒 **Embedded Wallet (Coming Soon)**: Privy integration
+  - Social login support
+  - Gasless transactions
+  - Enhanced user experience
+- ⚡ **Cross-Wallet EIP-7702 Features**:
+  - Authorization signing across all wallet types
+  - Smart account creation
+  - User operation sending
+  - Delegatee contract filtering and support checking
 
 ### ZeroDev Implementation
 - 🔐 Smart Account creation with EIP-7702
@@ -114,6 +158,39 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id_here
 - Keep your ZeroDev Project ID private
 - Use test accounts for development
 
+### 3. Wallet Configuration
+
+The Modular Wallet System supports multiple private key formats:
+
+#### Legacy Format (Space-separated)
+```env
+PRIVATE_KEYS="0x1111111111111111111111111111111111111111111111111111111111111111 0x2222222222222222222222222222222222222222222222222222222222222222"
+```
+
+#### Dynamic Format (Individual keys)
+```env
+KEY0=0x1111111111111111111111111111111111111111111111111111111111111111
+KEY1=0x2222222222222222222222222222222222222222222222222222222222222222
+KEY2=0x3333333333333333333333333333333333333333333333333333333333333333
+```
+
+#### Supported Wallet Types
+
+1. **Local Private Key Wallet** (Fully Implemented)
+   - Reads from environment variables
+   - Supports multiple key formats
+   - Full EIP-7702 functionality
+
+2. **Injected Wallet** (MetaMask - Fully Implemented)
+   - Browser wallet integration
+   - EIP-7702 with personal_sign
+   - Account change detection
+
+3. **Embedded Wallet** (Privy - Coming Soon)
+   - Social login support
+   - Gasless transactions
+   - Enhanced UX
+
 ### 3. Development
 
 ```bash
@@ -140,12 +217,35 @@ npm run check-account    # Check account status
 
 ## 🎯 Usage
 
+### Modular Wallet System
+
+The Modular Wallet System provides a unified interface for managing multiple wallet types:
+
+#### Wallet Connection
+1. **Select Wallet Type**: Choose from available wallet types (Local Private Key, MetaMask, etc.)
+2. **Configure Keys**: For local wallets, select from available private keys
+3. **Connect**: Establish connection and verify account access
+4. **Switch**: Seamlessly switch between different wallet types
+
+#### EIP-7702 Operations
+1. **Authorization**: Sign EIP-7702 authorizations for delegatee contracts
+2. **Smart Account Creation**: Create MetaMask Smart Account instances
+3. **User Operations**: Send transactions through upgraded accounts
+4. **Delegatee Management**: Filter and validate supported contracts
+
+#### Cross-Wallet Features
+- **Unified API**: Same interface across all wallet types
+- **Capability Detection**: Automatic feature support checking
+- **Delegatee Filtering**: Smart contract compatibility validation
+- **State Management**: Consistent wallet state across the application
+
 ### Web Interface
 
 1. **Connect Wallet**: Use the Connect Wallet button
 2. **Choose Implementation**:
-   - **ZeroDev Demo**: Main page for ZeroDev EIP-7702
-   - **MetaMask Authorization**: `/eip7702` for MetaMask Delegation Toolkit
+   - **EIP-7702 Authorization**: `/eip7702` for MetaMask Delegation Toolkit
+   - **Wallet Actions**: `/wallet-actions` for wallet operations
+   - **ZeroDev Demo**: `/zerodev` for ZeroDev EIP-7702
 3. **Follow the Steps**: Each implementation has a guided workflow
 
 ### Command Line
@@ -162,6 +262,67 @@ npm run check-account
 ```
 
 ## 🏛️ Architecture
+
+### Modular Wallet System Architecture
+
+The project implements a sophisticated modular wallet system that supports multiple wallet types through a unified interface:
+
+#### Core Components
+
+- **`src/types/wallet.ts`**: TypeScript interfaces defining wallet contracts
+  - `WalletInterface`: Base interface for all wallet implementations
+  - `WalletAccount`: Account information structure
+  - `WalletCapabilities`: Feature support matrix
+  - `WalletType`: Supported wallet types enumeration
+
+- **`src/lib/wallets/base-wallet.ts`**: Abstract base class providing common functionality
+  - Standard wallet operations (connect, disconnect, sign)
+  - EIP-7702 authorization support
+  - Smart account creation capabilities
+  - User operation sending
+
+- **`src/lib/wallets/wallet-manager.ts`**: Central coordination system
+  - Multi-wallet initialization and management
+  - Wallet switching and state management
+  - Capability checking and delegation
+  - React state change notifications
+
+- **`src/hooks/useWalletManager.ts`**: React integration layer
+  - Wallet state management in React components
+  - Hook-based API for wallet operations
+  - Automatic state synchronization
+
+#### Wallet Implementations
+
+- **`src/lib/wallets/local-key-wallet.ts`**: Environment-based private key wallet
+  - Reads private keys from environment variables
+  - Supports multiple key formats and indexing
+  - Full EIP-7702 implementation with MetaMask Delegation Toolkit
+
+- **`src/lib/wallets/injected-wallet.ts`**: Browser wallet integration
+  - MetaMask and other injected wallet support
+  - EIP-7702 with personal_sign fallback
+  - Account change detection and handling
+
+#### UI Components
+
+- **`src/components/wallet/WalletSelector.tsx`**: Wallet selection interface
+  - Available wallet detection and display
+  - Key selection for local wallets
+  - Connection status and switching
+
+- **`src/components/wallet/WalletOperations.tsx`**: Wallet operation interface
+  - Account information display
+  - Transaction signing and sending
+  - EIP-7702 authorization workflow
+
+#### Key Features
+
+- **Unified Interface**: All wallet types implement the same interface
+- **Capability Detection**: Automatic feature support checking
+- **Delegatee Filtering**: Smart contract support validation
+- **Cross-Wallet Compatibility**: EIP-7702 works across all wallet types
+- **Type Safety**: Full TypeScript support with strict typing
 
 ### Feature-Based Organization
 
@@ -197,11 +358,74 @@ Each feature can be configured independently:
 - **ZeroDev**: Configured via environment variables
 - **MetaMask**: Uses MetaMask Delegation Toolkit defaults
 
+### Wallet System Configuration
+
+The Modular Wallet System is highly configurable:
+
+#### Environment Variables
+```env
+# Private keys for local wallet
+PRIVATE_KEYS="0x111... 0x222... 0x333..."
+# OR
+KEY0=0x111...
+KEY1=0x222...
+KEY2=0x333...
+
+# ZeroDev configuration
+ZERODEV_PROJECT_ID=your_project_id
+
+# WalletConnect (optional)
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_id
+```
+
+#### Wallet Capabilities
+Each wallet type supports different capabilities:
+
+- **Local Private Key Wallet**:
+  - ✅ EIP-7702 authorization signing
+  - ✅ Smart account creation
+  - ✅ User operation sending
+  - ✅ Delegatee filtering
+  - ✅ Transaction signing
+
+- **Injected Wallet (MetaMask)**:
+  - ✅ EIP-7702 authorization signing (with personal_sign)
+  - ✅ EIP-712 typed data signing
+  - ✅ Account change detection
+  - ⚠️ Limited smart account features
+
+- **Embedded Wallet (Coming Soon)**:
+  - 🔄 Social login
+  - 🔄 Gasless transactions
+  - 🔄 Enhanced UX features
+
 ## 📚 Documentation
 
 - **[EIP-7702 Guide](docs/guides/EIP7702_README.md)**: Detailed MetaMask implementation guide
 - **[API Documentation](docs/api/)**: Technical API references
 - **[Examples](docs/examples/)**: Code examples and tutorials
+
+## 🎯 Modular Wallet System Benefits
+
+### For Developers
+- **Unified Interface**: Single API for multiple wallet types
+- **Type Safety**: Full TypeScript support with strict typing
+- **Extensible**: Easy to add new wallet implementations
+- **Capability Detection**: Automatic feature support checking
+- **Cross-Wallet Compatibility**: EIP-7702 works across all wallet types
+
+### For Users
+- **Flexibility**: Choose from multiple wallet options
+- **Consistency**: Same experience across different wallet types
+- **Security**: Environment-based private key management
+- **Convenience**: Seamless wallet switching
+- **Advanced Features**: EIP-7702 and smart account support
+
+### Use Cases
+- **Development**: Test with local private keys
+- **Production**: Use MetaMask or other injected wallets
+- **Enterprise**: Future embedded wallet integration
+- **DApps**: Consistent wallet integration across applications
 
 ## 🤝 Contributing
 

@@ -28,16 +28,7 @@ export default function Navigation() {
               >
                 EIP-7702 Authorization
               </Link>
-              <Link
-                href="/"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  pathname === '/'
-                    ? 'border-green-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                Modular Wallet System
-              </Link>
+
               <Link
                 href="/wallet-actions"
                 className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${

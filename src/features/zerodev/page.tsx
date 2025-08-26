@@ -58,7 +58,7 @@ export default function Home() {
                   🔗 Connect Your Wallet First
                 </h3>
                 <p className="text-yellow-800 text-sm mb-4">
-                  Please go to the <strong>Modular Wallet System</strong> tab and connect your wallet first.
+                  Please go to the <strong>Wallet Actions</strong> tab and connect your wallet first.
                 </p>
                 <a
                   href="/"
