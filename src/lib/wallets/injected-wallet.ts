@@ -24,6 +24,8 @@ const SUPPORTED_NETWORKS = [
 export class InjectedWallet extends BaseWallet {
   private ethereum: any
   private onAccountChange?: (account: WalletAccount | null) => void
+  private onNetworkChange?: (network: { chainId: number; name: string; isSupported: boolean }) => void
+  private currentChainId: number | null = null
 
   static async isAvailable(): Promise<boolean> {
     if (typeof window === 'undefined') return false
@@ -52,6 +54,10 @@ export class InjectedWallet extends BaseWallet {
       const address = accounts[0] as Address
       this.account = this.createAccount(address, 'injected')
 
+      // Get current chain ID
+      const chainIdHex = await this.ethereum.request({ method: 'eth_chainId' })
+      this.currentChainId = parseInt(chainIdHex, 16)
+
       // Create wallet client
       this.walletClient = createWalletClient({
         transport: custom(this.ethereum),
@@ -75,6 +81,28 @@ export class InjectedWallet extends BaseWallet {
           }
         }
       })
+
+      // Set up chain change listener
+      this.ethereum.on('chainChanged', (chainIdHex: string) => {
+        this.currentChainId = parseInt(chainIdHex, 16)
+        const network = this.getCurrentNetwork()
+
+        // Notify state change when network changes
+        if (this.onAccountChange) {
+          this.onAccountChange(this.account)
+        }
+
+        // Notify network change
+        if (this.onNetworkChange) {
+          this.onNetworkChange(network)
+        }
+      })
+
+      // Notify initial network state immediately after connection
+      const initialNetwork = this.getCurrentNetwork()
+      if (this.onNetworkChange) {
+        this.onNetworkChange(initialNetwork)
+      }
 
       return this.account
     } catch (error) {
@@ -325,16 +353,42 @@ export class InjectedWallet extends BaseWallet {
     this.onAccountChange = callback
   }
 
-  // Network detection methods - Only Sepolia supported
+  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
+    this.onNetworkChange = callback
+  }
+
+  // Network detection methods - Detect actual chain from MetaMask
   async getCurrentChainId(): Promise<number> {
-    return sepolia.id
+    if (!this.ethereum) {
+      throw new Error('No injected wallet available')
+    }
+
+    try {
+      const chainIdHex = await this.ethereum.request({ method: 'eth_chainId' })
+      this.currentChainId = parseInt(chainIdHex, 16)
+      return this.currentChainId
+    } catch (error) {
+      throw new Error(`Failed to get chain ID: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   getCurrentNetwork(): { chainId: number; name: string; isSupported: boolean } {
+    const chainId = this.currentChainId || sepolia.id
+    const network = SUPPORTED_NETWORKS.find(n => n.chainId === chainId)
+
+    if (network) {
+      return {
+        chainId: network.chainId,
+        name: network.name,
+        isSupported: network.isSupported
+      }
+    }
+
+    // If it's not in our supported networks, return unknown network info
     return {
-      chainId: sepolia.id,
-      name: 'Sepolia Testnet',
-      isSupported: true
+      chainId,
+      name: `Chain ID ${chainId}`,
+      isSupported: false
     }
   }
 
@@ -359,9 +413,5 @@ export class InjectedWallet extends BaseWallet {
       throw new Error('Only Sepolia network is supported')
     }
     // No action needed since we only support Sepolia
-  }
-
-  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
-    // No network changes supported since we only use Sepolia
   }
 }
