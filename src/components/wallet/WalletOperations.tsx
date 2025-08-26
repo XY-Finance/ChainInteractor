@@ -2,6 +2,10 @@
 
 import React, { useState } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
+import { usePublicClient } from 'wagmi'
+import { sepolia } from 'viem/chains'
+import { type Address } from 'viem'
+import { addresses } from '../../config/addresses'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 
@@ -59,8 +63,8 @@ export function WalletOperations() {
         address: currentAccount?.address,
         chainId: 11155111, // Sepolia
         nonce: 0,
-        contractAddress: '0x0000000000000000000000000000000000000000',
-        executor: '0x0000000000000000000000000000000000000000'
+        contractAddress: addresses.common.zero,
+        executor: addresses.common.zero
       }
 
       const sig = await sign7702Authorization(authorizationData)

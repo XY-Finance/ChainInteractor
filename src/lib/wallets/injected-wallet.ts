@@ -1,6 +1,6 @@
-import { BaseWallet } from './base-wallet'
 import { createWalletClient, custom } from 'viem'
 import { sepolia } from 'viem/chains'
+import { BaseWallet } from './base-wallet'
 import {
   type WalletAccount,
   type WalletCapabilities,
@@ -8,6 +8,7 @@ import {
 } from '../../types/wallet'
 import { type Address, type Hex } from 'viem'
 import { type DelegateeContract } from '../../types'
+import { addresses } from '../../config/addresses'
 
 export class InjectedWallet extends BaseWallet {
   private ethereum: any
@@ -94,11 +95,10 @@ export class InjectedWallet extends BaseWallet {
 
   // Override delegatee support for MetaMask
   isDelegateeSupported(delegateeAddress: string): boolean {
-    // MetaMask only supports delegating to the specific 0x63c... contract
+    // MetaMask only supports delegating to the specific MetaMask deleGator Core contract
     // It does NOT support revocation or any other delegatees
     const supportedAddresses: string[] = [
-      // Add the specific MetaMask supported contract address here
-      '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b'
+      addresses.delegatee.metamask
     ]
 
     return supportedAddresses.includes(delegateeAddress.toLowerCase())

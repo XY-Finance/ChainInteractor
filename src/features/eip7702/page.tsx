@@ -19,6 +19,7 @@ import {
   toMetaMaskSmartAccount,
   getDeleGatorEnvironment,
 } from '@metamask/delegation-toolkit'
+import { addresses } from '../../config/addresses'
 
 interface DelegateeContract {
   name: string
@@ -30,13 +31,13 @@ interface DelegateeContract {
 const DELEGATEE_CONTRACTS: DelegateeContract[] = [
   {
     name: 'MetaMask deleGator Core',
-    address: '0x0000000000000000000000000000000000000000', // Will be set dynamically
+    address: addresses.delegatee.metamask, // Use centralized address
     description: 'Core MetaMask deleGator implementation for EIP-7702',
     implementation: Implementation.Stateless7702
   },
   {
     name: 'Revoke Authorization',
-    address: '0x0000000000000000000000000000000000000000',
+    address: addresses.common.zero, // Use centralized zero address
     description: 'Remove/revoke EIP-7702 authorization by setting to zero address',
   }
 ]
@@ -107,7 +108,7 @@ export default function EIP7702Page() {
       console.log('🔍 Code:', code)
 
       if (!code || code === '0x') {
-        setCurrentDelegation('0x0000000000000000000000000000000000000000')
+        setCurrentDelegation(addresses.common.zero)
         addLog('📋 Current delegation: None (no delegation)')
       } else if (code.startsWith('0xef0100')) {
         // Extract the contract address by trimming the 0xef0100 prefix
@@ -147,7 +148,7 @@ export default function EIP7702Page() {
       return
     }
 
-    const isRevocation = selectedContract.address === '0x0000000000000000000000000000000000000000'
+    const isRevocation = selectedContract.address === addresses.common.zero
     setIsAuthorizing(true)
     addLog(`🔐 Starting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
@@ -189,7 +190,7 @@ export default function EIP7702Page() {
       return
     }
 
-    const isRevocation = authorizationHash.contractAddress === '0x0000000000000000000000000000000000000000'
+    const isRevocation = authorizationHash.contractAddress === addresses.common.zero
     setIsSigning(true)
     addLog(`✍️ Creating EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
@@ -237,7 +238,7 @@ export default function EIP7702Page() {
       return
     }
 
-    const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === '0x0000000000000000000000000000000000000000'
+    const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === addresses.common.zero
     setIsSubmitting(true)
     addLog(`📤 Submitting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} to blockchain...`)
     console.log('🔧 submitAuthorization called with signedAuthorization:', signedAuthorization)
@@ -371,7 +372,7 @@ export default function EIP7702Page() {
                             {contract.address}
                           </p>
                         </div>
-                        {contract.address === '0x0000000000000000000000000000000000000000' && (
+                        {contract.address === addresses.common.zero && (
                           <div className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">
                             Revoke
                           </div>
@@ -391,19 +392,19 @@ export default function EIP7702Page() {
               {selectedContract && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold text-gray-900">
-                    EIP-7702 {selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'} Workflow
+                    EIP-7702 {selectedContract?.address === addresses.common.zero ? 'Revocation' : 'Authorization'} Workflow
                   </h3>
                   <div className="flex gap-4 flex-wrap">
                     <button
                       onClick={authorize7702}
                       disabled={isAuthorizing}
                       className={`px-6 py-2 rounded-md font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
-                        selectedContract?.address === '0x0000000000000000000000000000000000000000'
+                        selectedContract?.address === addresses.common.zero
                           ? 'bg-red-600 text-white hover:bg-red-700'
                           : 'bg-blue-600 text-white hover:bg-blue-700'
                       }`}
                     >
-                      {isAuthorizing ? 'Preparing...' : `Prepare ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'} Data`}
+                      {isAuthorizing ? 'Preparing...' : `Prepare ${selectedContract?.address === addresses.common.zero ? 'Revocation' : 'Authorization'} Data`}
                     </button>
                     {authorizationHash && (
                       <button
@@ -411,7 +412,7 @@ export default function EIP7702Page() {
                         disabled={isSigning}
                         className="bg-purple-600 text-white px-6 py-2 rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                       >
-                        {isSigning ? 'Signing...' : `Sign ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'}`}
+                        {isSigning ? 'Signing...' : `Sign ${selectedContract?.address === addresses.common.zero ? 'Revocation' : 'Authorization'}`}
                       </button>
                     )}
                     {signedAuthorization && (
@@ -419,12 +420,12 @@ export default function EIP7702Page() {
                         onClick={submitAuthorization}
                         disabled={isSubmitting}
                         className={`px-6 py-2 rounded-md font-medium disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
-                          selectedContract?.address === '0x0000000000000000000000000000000000000000'
+                          selectedContract?.address === addresses.common.zero
                             ? 'bg-red-600 text-white hover:bg-red-700'
                             : 'bg-green-600 text-white hover:bg-green-700'
                         }`}
                       >
-                        {isSubmitting ? 'Submitting...' : `Send ${selectedContract?.address === '0x0000000000000000000000000000000000000000' ? 'Revocation' : 'Authorization'}`}
+                        {isSubmitting ? 'Submitting...' : `Send ${selectedContract?.address === addresses.common.zero ? 'Revocation' : 'Authorization'}`}
                       </button>
                     )}
                   </div>
