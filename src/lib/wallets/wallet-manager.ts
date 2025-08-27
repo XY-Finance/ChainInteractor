@@ -262,16 +262,16 @@ export class WalletManager {
     return await this.currentWallet.submit7702Authorization(signedAuthorization)
   }
 
-  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+  filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
 
-    if (typeof this.currentWallet.getAvailableDelegatees !== 'function') {
+    if (typeof this.currentWallet.filterCurrentDelegatee !== 'function') {
       throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee filtering`)
     }
 
-    return this.currentWallet.getAvailableDelegatees(currentDelegations, options)
+    return this.currentWallet.filterCurrentDelegatee(currentDelegations, options)
   }
 
   isDelegateeSupported(delegateeAddress: string): boolean {

@@ -63,7 +63,7 @@ export default function GlobalWalletManager() {
       }
     }
     autoConnect()
-  }, [isConnected, isLoading, connectWallet, areLocalKeysAvailable, hasAttemptedAutoConnect])
+  }, [isLoading, connectWallet, areLocalKeysAvailable, hasAttemptedAutoConnect])
 
   // Load available keys and accounts when component mounts or when connected
   useEffect(() => {

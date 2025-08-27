@@ -129,7 +129,7 @@ export abstract class BaseWallet implements WalletInterface {
   }
 
   // Delegatee filtering method
-  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+  filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
     return options.filter(contract => contract.address.toLowerCase() !== currentDelegations.toLowerCase())
   }
 
@@ -142,7 +142,7 @@ export abstract class BaseWallet implements WalletInterface {
 
   // Get delegatee options with support information
   getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,
       isSupported: this.isDelegateeSupported(contract.address)
@@ -160,7 +160,7 @@ export abstract class BaseWallet implements WalletInterface {
 
   // Get delegatee options with detailed support information
   getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)

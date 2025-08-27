@@ -19,7 +19,6 @@ export const addresses = {
   // Delegatee contract addresses
   delegatee: {
     metamask: '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b' as Address,
-    // Add other delegatee contracts as needed
   },
 
   // Contract addresses by network

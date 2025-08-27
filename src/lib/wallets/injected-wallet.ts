@@ -173,18 +173,12 @@ export class InjectedWallet extends BaseWallet {
 
   // Override delegatee support for MetaMask
   isDelegateeSupported(delegateeAddress: string): boolean {
-    // MetaMask only supports delegating to the specific MetaMask deleGator Core contract
-    // It does NOT support revocation or any other delegatees
-    const supportedAddresses: string[] = [
-      addresses.delegatee.metamask
-    ]
-
-    return supportedAddresses.includes(delegateeAddress.toLowerCase())
+    return delegateeAddress.toLowerCase() === addresses.delegatee.metamask.toLowerCase()
   }
 
   // Override getDelegateeOptions to provide MetaMask-specific behavior
   getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,
       isSupported: this.isDelegateeSupported(contract.address)
@@ -207,7 +201,7 @@ export class InjectedWallet extends BaseWallet {
 
   // Override getDelegateeOptionsWithReasons for MetaMask
   getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)

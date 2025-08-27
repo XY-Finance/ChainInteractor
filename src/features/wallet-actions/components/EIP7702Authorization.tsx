@@ -17,7 +17,7 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
     publicClient,
     sign7702Authorization,
     submit7702Authorization,
-    getAvailableDelegatees,
+    filterCurrentDelegatee,
     createSmartAccount,
     sendUserOperation,
     currentDelegation,
@@ -71,7 +71,7 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
       const currentDelegationStatus = currentDelegation || addresses.common.zero
 
       // Filter delegatees based on current delegation
-      const availableDelegatees = getAvailableDelegatees(currentDelegationStatus, DELEGATEE_CONTRACTS)
+      const availableDelegatees = filterCurrentDelegatee(currentDelegationStatus, DELEGATEE_CONTRACTS)
 
       return availableDelegatees
     } catch (error) {
