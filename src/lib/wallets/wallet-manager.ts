@@ -178,6 +178,15 @@ export class WalletManager {
     return []
   }
 
+  // Check if local keys are loaded and available
+  async areLocalKeysAvailable(): Promise<boolean> {
+    const localWallet = this.wallets.get('local-key')
+    if (localWallet && typeof (localWallet as any).areKeysLoaded === 'function') {
+      return await (localWallet as any).areKeysLoaded()
+    }
+    return false
+  }
+
   // Get available accounts for injected wallet (MetaMask)
   async getAvailableInjectedAccounts() {
     const injectedWallet = this.wallets.get('injected')

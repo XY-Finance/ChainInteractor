@@ -60,6 +60,23 @@ export class LocalKeyWallet extends BaseWallet {
     return this.availableKeys
   }
 
+  // Check if keys are loaded
+  async areKeysLoaded(): Promise<boolean> {
+    // If keys are already loaded, return true
+    if (this.availableKeys.length > 0) {
+      return true
+    }
+
+    // If keys are not loaded, try to load them
+    try {
+      await this.loadAvailableKeys()
+      return this.availableKeys.length > 0
+    } catch (error) {
+      console.error('Failed to load keys:', error)
+      return false
+    }
+  }
+
   // Override signMessage to use server API (private keys stay on server)
   async signMessage(message: string): Promise<Hex> {
     const account = await this.getAccount()

@@ -38,6 +38,7 @@ interface WalletContextType {
   createSmartAccount: () => Promise<any>
   sendUserOperation: (userOp: any) => Promise<any>
   getAvailableKeys: () => Promise<any>
+  areLocalKeysAvailable: () => Promise<boolean>
   getAvailableInjectedAccounts: () => Promise<any>
   getPublicClient: () => any
   getWalletClient: () => any
@@ -325,6 +326,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return await walletManager.getAvailableKeys()
   }, [walletManager])
 
+  // Check if local keys are available
+  const areLocalKeysAvailable = useCallback(async () => {
+    return await walletManager.areLocalKeysAvailable()
+  }, [walletManager])
+
   // Get available injected accounts
   const getAvailableInjectedAccounts = useCallback(async () => {
     return await walletManager.getAvailableInjectedAccounts()
@@ -407,6 +413,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     createSmartAccount,
     sendUserOperation,
     getAvailableKeys,
+    areLocalKeysAvailable,
     getAvailableInjectedAccounts,
     getPublicClient,
     getWalletClient,

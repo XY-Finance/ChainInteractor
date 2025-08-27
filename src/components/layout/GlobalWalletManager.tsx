@@ -10,10 +10,12 @@ export default function GlobalWalletManager() {
     isConnected,
     currentAccount,
     getAvailableKeys,
+    areLocalKeysAvailable,
     switchWallet,
     disconnectWallet,
     isLoading,
-    getAvailableInjectedAccounts
+    getAvailableInjectedAccounts,
+    connectWallet
   } = useWalletManager()
 
   // Wallet dropdown states
@@ -22,6 +24,46 @@ export default function GlobalWalletManager() {
   const [availableKeys, setAvailableKeys] = useState<Array<{index: number, address: string}>>([])
   const [availableInjectedAccounts, setAvailableInjectedAccounts] = useState<Array<{index: number, address: string}>>([])
   const [switchingAccount, setSwitchingAccount] = useState<{type: string, index: number} | null>(null)
+  const [hasAttemptedAutoConnect, setHasAttemptedAutoConnect] = useState(false)
+
+  // Auto-connect to KEY0 on component mount
+  useEffect(() => {
+    const autoConnect = async () => {
+      if (!isConnected && !isLoading && !hasAttemptedAutoConnect) {
+        try {
+          console.log('🔗 Auto-connecting to KEY0...')
+          setHasAttemptedAutoConnect(true)
+
+          // Wait for local keys to be available (with retry)
+          let keysAvailable = false
+          let retryCount = 0
+          const maxRetries = 10
+
+          while (!keysAvailable && retryCount < maxRetries) {
+            keysAvailable = await areLocalKeysAvailable()
+            if (!keysAvailable) {
+              console.log(`⏳ Waiting for keys to load... (attempt ${retryCount + 1}/${maxRetries})`)
+              await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms
+              retryCount++
+            }
+          }
+
+          if (!keysAvailable) {
+            console.log('⚠️ Local keys not available after retries, skipping auto-connection')
+            return
+          }
+
+          console.log('✅ Keys loaded, attempting connection...')
+          await connectWallet('local-key', 0)
+          console.log('✅ Auto-connected to KEY0 successfully')
+        } catch (error) {
+          console.log('⚠️ Auto-connection to KEY0 failed:', error)
+          // Don't show error to user, just log it
+        }
+      }
+    }
+    autoConnect()
+  }, [isConnected, isLoading, connectWallet, areLocalKeysAvailable, hasAttemptedAutoConnect])
 
   // Load available keys and accounts when component mounts or when connected
   useEffect(() => {
@@ -92,6 +134,8 @@ export default function GlobalWalletManager() {
     try {
       await disconnectWallet()
       setShowWalletDropdown(false)
+      // Reset auto-connect flag when user manually disconnects
+      setHasAttemptedAutoConnect(false)
     } catch (err) {
       console.error('Failed to disconnect wallet:', err)
     }
