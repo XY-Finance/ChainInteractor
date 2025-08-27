@@ -15,6 +15,12 @@ import {
   formatUnits
 } from 'viem'
 import { sepolia } from 'viem/chains'
+import {
+  Implementation,
+  toMetaMaskSmartAccount,
+  getDeleGatorEnvironment,
+} from '@metamask/delegation-toolkit'
+import { addresses } from '../../config/addresses'
 
 interface PermitData {
   owner: Address
@@ -31,6 +37,27 @@ interface ERC20Permit {
   decimals: number
   permitData: PermitData
 }
+
+interface DelegateeContract {
+  name: string
+  address: Address
+  description: string
+  implementation?: Implementation
+}
+
+const DELEGATEE_CONTRACTS: DelegateeContract[] = [
+  {
+    name: 'MetaMask deleGator Core',
+    address: addresses.delegatee.metamask,
+    description: 'Core MetaMask deleGator implementation for EIP-7702',
+    implementation: Implementation.Stateless7702
+  },
+  {
+    name: 'Revoke Authorization',
+    address: addresses.common.zero,
+    description: 'Remove/revoke EIP-7702 authorization by setting to zero address',
+  }
+]
 
 const COMMON_TOKENS = [
   {
@@ -93,6 +120,14 @@ const COMMON_USE_CASES = [
     icon: '📋',
     category: 'Advanced',
     status: 'tba'
+  },
+  {
+    id: 'eip7702',
+    name: 'EIP-7702 Authorization',
+    description: 'Sign EIP-7702 authorization messages',
+    icon: '🔗',
+    category: 'Advanced',
+    status: 'ready'
   }
 ]
 
@@ -111,6 +146,23 @@ export default function WalletActionsPage() {
   const [customMessage, setCustomMessage] = useState('')
   const [typedData, setTypedData] = useState('')
 
+  // EIP-7702 state variables
+  const [selectedContract, setSelectedContract] = useState<DelegateeContract | null>(null)
+  const [authorizationHash, setAuthorizationHash] = useState<any>(null)
+  const [signedAuthorization, setSignedAuthorization] = useState<any>(null)
+  const [isAuthorizing, setIsAuthorizing] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [transactionHash, setTransactionHash] = useState<string>('')
+  const [smartAccountAddress, setSmartAccountAddress] = useState<string>('')
+  const [userOpHash, setUserOpHash] = useState<string>('')
+  const [isSendingUserOp, setIsSendingUserOp] = useState(false)
+  const [recipientAddress, setRecipientAddress] = useState('')
+  const [eip7702Amount, setEip7702Amount] = useState('')
+  const [currentDelegation, setCurrentDelegation] = useState<string>('')
+  const [isCheckingDelegation, setIsCheckingDelegation] = useState(false)
+  const [verificationResult, setVerificationResult] = useState<any>(null)
+  const [currentNonce, setCurrentNonce] = useState<number | null>(null)
+
   const address = currentAccount?.address
   const walletType = currentAccount?.type
 
@@ -119,6 +171,34 @@ export default function WalletActionsPage() {
     // const oneHourFromNow = Math.floor(Date.now() / 1000) + 3600
     // setDeadline(oneHourFromNow.toString())
   }, [])
+
+  // Initialize EIP-7702 contracts and check delegation status
+  useEffect(() => {
+    const initializeEIP7702 = async () => {
+      if (!publicClient) return
+
+      try {
+        const environment = getDeleGatorEnvironment(sepolia.id)
+        const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl
+
+        DELEGATEE_CONTRACTS[0].address = contractAddress
+
+        addLog(`✅ Initialized EIP-7702 delegatee contracts`)
+        addLog(`📋 MetaMask deleGator Core: ${contractAddress}`)
+      } catch (error) {
+        addLog(`❌ Error initializing EIP-7702 contracts: ${error}`)
+      }
+    }
+
+    initializeEIP7702()
+  }, [publicClient])
+
+  // Check current delegation status when address changes
+  useEffect(() => {
+    if (address && publicClient) {
+      checkCurrentDelegation()
+    }
+  }, [address, publicClient])
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
@@ -387,8 +467,88 @@ export default function WalletActionsPage() {
       case 'typed-data':
         await signTypedDataFunction()
         break
+      case 'eip7702':
+        await authorize7702()
+        break
       default:
         addLog(`⚠️ ${selectedUseCase.name} not yet implemented`)
+    }
+  }
+
+  // EIP-7702 Functions
+  const checkCurrentDelegation = async () => {
+    if (!address || !publicClient) return
+
+    setIsCheckingDelegation(true)
+    try {
+      const code = await publicClient.getCode({ address: address as Address })
+      console.log('🔍 Code:', code)
+
+      if (!code || code === '0x') {
+        setCurrentDelegation(addresses.common.zero)
+        addLog('📋 Current delegation: None (no delegation)')
+      } else if (code.startsWith('0xef0100')) {
+        const contractAddress = '0x' + code.slice(8)
+        setCurrentDelegation(contractAddress)
+        addLog(`📋 Current delegation: Contract ${contractAddress}`)
+      } else {
+        setCurrentDelegation(code)
+        addLog(`📋 Current delegation: Unknown contract (${code})`)
+      }
+
+      const nonce = await publicClient.getTransactionCount({ address: address as Address })
+      setCurrentNonce(nonce)
+      addLog(`📊 Current transaction count (nonce): ${nonce}`)
+    } catch (error) {
+      addLog(`❌ Error checking delegation: ${error}`)
+      setCurrentDelegation('')
+      setCurrentNonce(null)
+    } finally {
+      setIsCheckingDelegation(false)
+    }
+  }
+
+  const authorize7702 = async () => {
+    if (!isConnected || !currentAccount) {
+      addLog('❌ Please connect your wallet first')
+      return
+    }
+
+    if (!selectedContract || !address || !publicClient) {
+      addLog('❌ Selected contract, address, or public client not available')
+      return
+    }
+
+    const isRevocation = selectedContract.address === addresses.common.zero
+    setIsAuthorizing(true)
+    addLog(`🔐 Starting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
+
+    try {
+      const nonce = await publicClient.getTransactionCount({ address })
+      addLog(`📊 Current nonce: ${nonce}`)
+
+      const authorizationData = {
+        address: address as `0x${string}`,
+        chainId: sepolia.id,
+        contractAddress: selectedContract.address,
+        executor: 'self' as const,
+      }
+
+      addLog(`📝 ${isRevocation ? 'Revocation' : 'Authorization'} data structure:`)
+      addLog(`   - Address: ${authorizationData.address}`)
+      addLog(`   - Chain ID: ${authorizationData.chainId}`)
+      addLog(`   - Nonce: ${authorizationData.executor == 'self' ? nonce + 1 : nonce}`)
+      addLog(`   - Contract: ${authorizationData.contractAddress}`)
+      addLog(`   - Executor: ${authorizationData.executor}`)
+
+      setAuthorizationHash(authorizationData)
+      setSignedAuthorization(null)
+      addLog(`✅ ${isRevocation ? 'Revocation' : 'Authorization'} data prepared successfully`)
+      addLog(`📝 Ready to sign ${isRevocation ? 'revocation' : 'authorization'}`)
+    } catch (error) {
+      addLog(`❌ Authorization failed: ${error}`)
+    } finally {
+      setIsAuthorizing(false)
     }
   }
 
@@ -605,6 +765,60 @@ export default function WalletActionsPage() {
                 </div>
               )}
 
+              {/* EIP-7702 Section */}
+              {selectedUseCase.id === 'eip7702' && (
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold text-primary">EIP-7702 Authorization</h3>
+
+                  {/* Contract Selection */}
+                  <div className="space-y-4">
+                    <label className="block text-sm font-medium text-gray-700">Select Delegatee Contract</label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {DELEGATEE_CONTRACTS.map((contract) => (
+                        <div
+                          key={contract.address}
+                          className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                            selectedContract?.address === contract.address
+                              ? 'border-orange-500 bg-orange-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                          onClick={() => setSelectedContract(contract)}
+                        >
+                          <div className="text-center">
+                            <h4 className="font-medium text-primary">{contract.name}</h4>
+                            <p className="text-sm text-secondary">{contract.description}</p>
+                            <p className="text-xs text-muted font-mono mt-1">
+                              {contract.address.slice(0, 6)}...{contract.address.slice(-4)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Current Delegation Status */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">Current Delegation Status</h4>
+                    <p className="text-blue-800 text-sm">
+                      <strong>Address:</strong> {address || 'Not connected'}
+                    </p>
+                    <p className="text-blue-800 text-sm">
+                      <strong>Current Delegation:</strong> {currentDelegation || 'Checking...'}
+                    </p>
+                    <p className="text-blue-800 text-sm">
+                      <strong>Nonce:</strong> {currentNonce !== null ? currentNonce : 'Checking...'}
+                    </p>
+                    <button
+                      onClick={checkCurrentDelegation}
+                      disabled={isCheckingDelegation}
+                      className="mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      {isCheckingDelegation ? 'Checking...' : 'Refresh Status'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Action Button */}
               <div className="pt-6 border-t">
                 {selectedUseCase.status === 'tba' ? (
@@ -675,6 +889,14 @@ export default function WalletActionsPage() {
                 <p className="text-blue-800 text-sm">
                   Sign permits to allow contracts to spend your tokens without requiring a separate approval transaction.
                   This enables gasless token interactions.
+                </p>
+              </div>
+
+              <div className="card bg-purple-50 border-purple-200">
+                <h3 className="text-lg font-semibold text-purple-900 mb-2">EIP-7702 Authorization ✅</h3>
+                <p className="text-purple-800 text-sm">
+                  Sign EIP-7702 authorization messages for smart account delegation.
+                  Enables advanced account abstraction features with MetaMask.
                 </p>
               </div>
 
