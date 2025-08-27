@@ -125,8 +125,17 @@ export class InjectedWallet extends BaseWallet {
   }
 
   async disconnect(): Promise<void> {
+    // Remove event listeners if ethereum is available
+    if (this.ethereum) {
+      // Remove account change listener
+      this.ethereum.removeAllListeners('accountsChanged')
+      // Remove chain change listener
+      this.ethereum.removeAllListeners('chainChanged')
+    }
+
     this.account = null
     this.onAccountChange = undefined
+    this.onNetworkChange = undefined
   }
 
   async getAccount(): Promise<WalletAccount | null> {

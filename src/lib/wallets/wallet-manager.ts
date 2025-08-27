@@ -128,6 +128,8 @@ export class WalletManager {
       await this.currentWallet.disconnect()
       this.currentWallet = null
       this.currentAccount = null
+      // Notify React context of state change
+      this.notifyStateChange()
     }
   }
 

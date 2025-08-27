@@ -134,8 +134,8 @@ export default function GlobalWalletManager() {
     try {
       await disconnectWallet()
       setShowWalletDropdown(false)
-      // Reset auto-connect flag when user manually disconnects
-      setHasAttemptedAutoConnect(false)
+      // Don't reset auto-connect flag to prevent unwanted reconnection
+      // setHasAttemptedAutoConnect(false)
     } catch (err) {
       console.error('Failed to disconnect wallet:', err)
     }
