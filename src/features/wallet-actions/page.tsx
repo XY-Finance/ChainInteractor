@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 import WalletStatus from './components/WalletStatus'
 import UseCaseCard from './components/UseCaseCard'
@@ -103,12 +103,17 @@ export default function WalletActionsPage() {
     addLog(`🚀 Starting ${useCase.title}...`)
   }
 
-  // Check delegation status on mount
-  useEffect(() => {
+  // Check delegation status on mount - memoized to prevent unnecessary re-runs
+  const checkDelegationOnMount = useCallback(() => {
     if (currentAccount) {
       checkCurrentDelegation().catch(console.error)
     }
   }, [currentAccount, checkCurrentDelegation])
+
+  // Check delegation status on mount
+  useEffect(() => {
+    checkDelegationOnMount()
+  }, [checkDelegationOnMount])
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">

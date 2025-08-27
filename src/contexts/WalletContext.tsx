@@ -77,20 +77,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setMounted(true)
   }, [])
 
-  // Load available wallets
-  useEffect(() => {
+  // Load available wallets - memoized to prevent unnecessary re-runs
+  const loadWallets = useCallback(async () => {
     if (!mounted) return
 
-    const loadWallets = async () => {
-      try {
-        const wallets = await walletManager.getAvailableWallets()
-        setAvailableWallets(wallets)
-      } catch (error) {
-        console.error('Failed to load available wallets:', error)
-      }
+    try {
+      const wallets = await walletManager.getAvailableWallets()
+      setAvailableWallets(wallets)
+    } catch (error) {
+      console.error('Failed to load available wallets:', error)
     }
-    loadWallets()
   }, [walletManager, mounted])
+
+  // Load available wallets
+  useEffect(() => {
+    loadWallets()
+  }, [loadWallets])
 
   // Update state from wallet manager
   const updateState = useCallback(() => {
@@ -101,14 +103,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setIsConnected(connected)
   }, [walletManager])
 
+  // Set up state change callback - memoized callback to prevent recreation
+  const stateChangeCallback = useCallback(() => {
+    updateState()
+  }, [updateState])
+
   // Set up state change callback
   useEffect(() => {
     if (!mounted) return
 
-    walletManager.setStateChangeCallback(() => {
-      updateState()
-    })
-  }, [walletManager, mounted, updateState])
+    walletManager.setStateChangeCallback(stateChangeCallback)
+  }, [walletManager, mounted, stateChangeCallback])
 
   // Connect to wallet
   const connectWallet = useCallback(async (type: WalletType, keyIndex?: number) => {
@@ -420,8 +425,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     updateState()
   }, [updateState, mounted])
 
-  // Check delegation when wallet connects or changes
-  useEffect(() => {
+  // Check delegation when wallet connects or changes - memoized to prevent unnecessary re-runs
+  const checkDelegationEffect = useCallback(() => {
     if (isConnected && currentAccount) {
       checkCurrentDelegation()
     } else {
@@ -429,6 +434,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setCurrentNonce(null)
     }
   }, [isConnected, currentAccount, checkCurrentDelegation])
+
+  // Check delegation when wallet connects or changes
+  useEffect(() => {
+    checkDelegationEffect()
+  }, [checkDelegationEffect])
 
   // Memoized derived values to prevent unnecessary recalculations
   const address = useMemo(() => currentAccount?.address || null, [currentAccount?.address])

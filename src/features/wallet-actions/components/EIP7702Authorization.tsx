@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { addresses } from '../../../config/addresses'
 import { sepolia } from 'viem/chains'
@@ -41,12 +41,17 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCheckingDelegation, setIsCheckingDelegation] = useState(false)
 
-    // Check current delegation on mount only
-  useEffect(() => {
+    // Check current delegation on mount only - memoized to prevent unnecessary re-runs
+  const logDelegationStatus = useCallback(() => {
     if (address) {
       console.log(`🔍 Current delegation status: ${currentDelegation || 'Not delegated'}`)
     }
   }, [address, currentDelegation])
+
+  // Check current delegation on mount only
+  useEffect(() => {
+    logDelegationStatus()
+  }, [logDelegationStatus])
 
   // Available delegatee contracts
   const DELEGATEE_CONTRACTS: DelegateeContract[] = [

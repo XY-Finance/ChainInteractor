@@ -56,11 +56,7 @@ export default function ERC20Permit({ addLog }: ERC20PermitProps) {
   const [signature, setSignature] = useState<string>('')
   const [isSigning, setIsSigning] = useState(false)
 
-  useEffect(() => {
-    // Set default deadline to 1 hour from now
-    // const oneHourFromNow = Math.floor(Date.now() / 1000) + 3600
-    // setDeadline(oneHourFromNow.toString())
-  }, [])
+  // Removed empty useEffect - no longer needed
 
   const generatePermitData = async (): Promise<PermitData> => {
     if (!address || !publicClient) {

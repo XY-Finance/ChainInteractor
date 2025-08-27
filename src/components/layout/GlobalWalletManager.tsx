@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 import { WalletSelector } from '../wallet'
 import { NetworkSelector } from '../ui'
@@ -63,9 +63,15 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
     }
   }, [isConnected, isLoading, hasAttemptedAutoConnect, areLocalKeysAvailable, connectWallet])
 
+  // Auto-connect to KEY0 on component mount - use ref to prevent unnecessary re-runs
+  const hasAutoConnectedRef = useRef(false)
+
   // Auto-connect to KEY0 on component mount
   useEffect(() => {
-    autoConnect()
+    if (!hasAutoConnectedRef.current) {
+      hasAutoConnectedRef.current = true
+      autoConnect()
+    }
   }, [autoConnect])
 
   // Memoized load accounts function
@@ -94,10 +100,16 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
     }
   }, [isConnected, getAvailableKeys, getAvailableInjectedAccounts])
 
+  // Load available keys and accounts when component mounts or when connected - use ref to prevent unnecessary re-runs
+  const lastLoadAccountsRef = useRef<{ isConnected: boolean }>({ isConnected: false })
+
   // Load available keys and accounts when component mounts or when connected
   useEffect(() => {
-    loadAccounts()
-  }, [loadAccounts])
+    if (lastLoadAccountsRef.current.isConnected !== isConnected) {
+      lastLoadAccountsRef.current.isConnected = isConnected
+      loadAccounts()
+    }
+  }, [loadAccounts, isConnected])
 
   // Memoized click outside handler
   const handleClickOutside = useCallback((event: MouseEvent) => {
