@@ -59,35 +59,40 @@ const COMMON_USE_CASES = [
     name: 'ERC20 Permit',
     description: 'Sign ERC20 permit for gasless token approvals',
     icon: '🪙',
-    category: 'Token Approvals'
+    category: 'Token Approvals',
+    status: 'ready'
   },
   {
     id: 'delegation',
     name: 'Delegation',
-    description: 'Delegate voting power to another address',
+    description: 'Delegate voting power to another address (TBA)',
     icon: '️',
-    category: 'Governance'
+    category: 'Governance',
+    status: 'tba'
   },
   {
     id: 'authorization',
     name: 'Authorization',
-    description: 'Authorize contract to act on your behalf',
+    description: 'Authorize contract to act on your behalf (TBA)',
     icon: '🔐',
-    category: 'Access Control'
+    category: 'Access Control',
+    status: 'tba'
   },
   {
     id: 'signature',
     name: 'Message Signature',
-    description: 'Sign arbitrary messages for verification',
+    description: 'Sign arbitrary messages for verification (TBA)',
     icon: '✍️',
-    category: 'General'
+    category: 'General',
+    status: 'tba'
   },
   {
     id: 'typed-data',
     name: 'Typed Data (EIP-712)',
-    description: 'Sign structured data with EIP-712',
+    description: 'Sign structured data with EIP-712 (TBA)',
     icon: '📋',
-    category: 'Advanced'
+    category: 'Advanced',
+    status: 'tba'
   }
 ]
 
@@ -367,6 +372,11 @@ export default function WalletActionsPage() {
   }
 
   const handleUseCaseAction = async () => {
+    if (selectedUseCase.status === 'tba') {
+      addLog(`⚠️ ${selectedUseCase.name} is not yet implemented (TBA)`)
+      return
+    }
+
     switch (selectedUseCase.id) {
       case 'erc20-permit':
         await signERC20Permit()
@@ -448,17 +458,26 @@ export default function WalletActionsPage() {
                   {COMMON_USE_CASES.map((useCase) => (
                     <div
                       key={useCase.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                        selectedUseCase.id === useCase.id
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                      className={`p-4 border rounded-lg transition-colors ${
+                        useCase.status === 'tba'
+                          ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                          : selectedUseCase.id === useCase.id
+                          ? 'border-orange-500 bg-orange-50 cursor-pointer'
+                          : 'border-gray-200 hover:border-gray-300 cursor-pointer'
                       }`}
-                      onClick={() => setSelectedUseCase(useCase)}
+                      onClick={() => useCase.status === 'ready' && setSelectedUseCase(useCase)}
                     >
                       <div className="flex items-center space-x-3">
                         <span className="text-2xl">{useCase.icon}</span>
                         <div>
-                          <h4 className="font-medium text-primary">{useCase.name}</h4>
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-medium text-primary">{useCase.name}</h4>
+                            {useCase.status === 'tba' && (
+                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+                                TBA
+                              </span>
+                            )}
+                          </div>
                           <p className="text-sm text-secondary">{useCase.description}</p>
                           <span className="text-xs text-muted bg-gray-100 px-2 py-1 rounded mt-1 inline-block">
                             {useCase.category}
@@ -588,13 +607,26 @@ export default function WalletActionsPage() {
 
               {/* Action Button */}
               <div className="pt-6 border-t">
-                <button
-                  onClick={handleUseCaseAction}
-                  disabled={isSigning}
-                  className="btn-primary w-full px-6 py-3"
-                >
-                  {isSigning ? 'Signing...' : `Sign ${selectedUseCase.name}`}
-                </button>
+                {selectedUseCase.status === 'tba' ? (
+                  <div className="text-center py-6">
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+                        🚧 Coming Soon
+                      </h3>
+                      <p className="text-yellow-800 text-sm">
+                        {selectedUseCase.name} functionality is currently under development and will be available soon.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleUseCaseAction}
+                    disabled={isSigning}
+                    className="btn-primary w-full px-6 py-3"
+                  >
+                    {isSigning ? 'Signing...' : `Sign ${selectedUseCase.name}`}
+                  </button>
+                )}
               </div>
 
               {/* Signature Display */}
@@ -639,34 +671,34 @@ export default function WalletActionsPage() {
 
             <div className="grid md:grid-cols-2 gap-6 mt-6">
               <div className="card bg-blue-50 border-blue-200">
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">ERC20 Permit</h3>
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">ERC20 Permit ✅</h3>
                 <p className="text-blue-800 text-sm">
                   Sign permits to allow contracts to spend your tokens without requiring a separate approval transaction.
                   This enables gasless token interactions.
                 </p>
               </div>
 
-              <div className="card bg-green-50 border-green-200">
-                <h3 className="text-lg font-semibold text-green-900 mb-2">Message Signing</h3>
-                <p className="text-green-800 text-sm">
+              <div className="card bg-gray-50 border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Message Signing 🚧</h3>
+                <p className="text-gray-800 text-sm">
                   Sign arbitrary messages for authentication, verification, or authorization purposes.
-                  Useful for off-chain verification.
+                  Useful for off-chain verification. <strong>Coming soon!</strong>
                 </p>
               </div>
 
-              <div className="card bg-purple-50 border-purple-200">
-                <h3 className="text-lg font-semibold text-purple-900 mb-2">EIP-712 Typed Data</h3>
-                <p className="text-purple-800 text-sm">
+              <div className="card bg-gray-50 border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">EIP-712 Typed Data 🚧</h3>
+                <p className="text-gray-800 text-sm">
                   Sign structured data with EIP-712 for better security and user experience.
-                  Provides human-readable signing messages.
+                  Provides human-readable signing messages. <strong>Coming soon!</strong>
                 </p>
               </div>
 
-              <div className="card bg-orange-50 border-orange-200">
-                <h3 className="text-lg font-semibold text-orange-900 mb-2">Delegation</h3>
-                <p className="text-orange-800 text-sm">
+              <div className="card bg-gray-50 border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delegation 🚧</h3>
+                <p className="text-gray-800 text-sm">
                   Delegate voting power or other permissions to another address.
-                  Common in governance and access control systems.
+                  Common in governance and access control systems. <strong>Coming soon!</strong>
                 </p>
               </div>
             </div>
