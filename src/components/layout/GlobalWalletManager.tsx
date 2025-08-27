@@ -35,10 +35,15 @@ export default function GlobalWalletManager() {
           console.log('📋 Loaded local keys:', localKeys)
           setAvailableKeys(localKeys)
 
-          // Load injected accounts (MetaMask)
-          const injectedAccounts = await getAvailableInjectedAccounts()
-          console.log('📋 Loaded injected accounts:', injectedAccounts)
-          setAvailableInjectedAccounts(injectedAccounts)
+          // Load injected accounts (MetaMask) - handle gracefully if not available
+          try {
+            const injectedAccounts = await getAvailableInjectedAccounts()
+            console.log('📋 Loaded injected accounts:', injectedAccounts)
+            setAvailableInjectedAccounts(injectedAccounts)
+          } catch (injectedError) {
+            console.log('📋 No injected wallet available, skipping injected accounts')
+            setAvailableInjectedAccounts([])
+          }
         } catch (err) {
           console.error('Failed to load available accounts:', err)
         }

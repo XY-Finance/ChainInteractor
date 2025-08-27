@@ -182,12 +182,17 @@ export class WalletManager {
   async getAvailableInjectedAccounts() {
     const injectedWallet = this.wallets.get('injected')
     if (injectedWallet && typeof (injectedWallet as any).getAvailableAccounts === 'function') {
-      const accounts = await (injectedWallet as any).getAvailableAccounts()
-      // Convert to the format expected by WalletSelector
-      return accounts.map((account: any, index: number) => ({
-        index: index,
-        address: account.address
-      }))
+      try {
+        const accounts = await (injectedWallet as any).getAvailableAccounts()
+        // Convert to the format expected by WalletSelector
+        return accounts.map((account: any, index: number) => ({
+          index: index,
+          address: account.address
+        }))
+      } catch (error) {
+        console.log('No injected wallet available, returning empty array')
+        return []
+      }
     }
 
     return []

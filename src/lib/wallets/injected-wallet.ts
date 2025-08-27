@@ -136,7 +136,8 @@ export class InjectedWallet extends BaseWallet {
   // Get all available accounts from MetaMask
   async getAvailableAccounts(): Promise<WalletAccount[]> {
     if (!this.ethereum) {
-      throw new Error('No injected wallet available')
+      console.log('No injected wallet available, returning empty array')
+      return []
     }
 
     try {
