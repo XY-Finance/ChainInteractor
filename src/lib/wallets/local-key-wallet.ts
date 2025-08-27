@@ -351,9 +351,26 @@ export class LocalKeyWallet extends BaseWallet {
     return null
   }
 
-  getCurrentNonce(): number | null {
-    // Local key wallet doesn't track nonce
-    return null
+  async getCurrentNonce(): Promise<number | null> {
+    try {
+      const account = await this.getAccount()
+      if (!account) {
+        return null
+      }
+
+      // Use server API to get nonce
+      const response = await fetch('/api/wallet-status')
+      if (!response.ok) {
+        console.error('Failed to fetch wallet status for nonce')
+        return null
+      }
+
+      const data = await response.json()
+      return data.nonce || null
+    } catch (error) {
+      console.error('Failed to get nonce for local key wallet:', error)
+      return null
+    }
   }
 
   // Helper method to get wallet info

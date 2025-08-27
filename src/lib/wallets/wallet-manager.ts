@@ -505,13 +505,13 @@ export class WalletManager {
     return null
   }
 
-  getCurrentNonce(): number | null {
+  async getCurrentNonce(): Promise<number | null> {
     if (!this.currentWallet) {
       return null
     }
 
     if (typeof this.currentWallet.getCurrentNonce === 'function') {
-      return this.currentWallet.getCurrentNonce()
+      return await this.currentWallet.getCurrentNonce()
     }
 
     return null

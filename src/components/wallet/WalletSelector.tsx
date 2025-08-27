@@ -38,7 +38,7 @@ export function WalletSelector() {
     loadKeys()
   }, [getAvailableKeys])
 
-      const handleConnect = async (type: WalletType) => {
+  const handleConnect = async (type: WalletType) => {
     try {
       if (type === 'local-key') {
         // For local key wallet, always check if we have multiple keys

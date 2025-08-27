@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { parseEther, formatEther, type Address, parseUnits, formatUnits } from 'viem'
 import { sepolia } from 'viem/chains'
@@ -118,7 +118,7 @@ export default function ERC20Permit({ addLog }: ERC20PermitProps) {
     }
   }
 
-  const signERC20Permit = async () => {
+  const signERC20Permit = useCallback(async () => {
     if (!address) {
       addLog('❌ Please connect your wallet first')
       return
@@ -207,7 +207,7 @@ export default function ERC20Permit({ addLog }: ERC20PermitProps) {
     } finally {
       setIsSigning(false)
     }
-  }
+  }, [address, spenderAddress, amount, deadline, selectedToken, signTypedData, addLog])
 
   return (
     <div className="space-y-6">

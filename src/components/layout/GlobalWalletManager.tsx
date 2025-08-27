@@ -143,6 +143,8 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
     }
   }, [switchingAccount, switchWallet])
 
+
+
   // Memoized disconnect handler
   const handleDisconnect = useCallback(async () => {
     try {
@@ -161,6 +163,22 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
 
   const toggleAccountOptions = useCallback(() => {
     setShowAccountOptions(prev => !prev)
+  }, [])
+
+  // Calculate dropdown position based on available space
+  const getDropdownPosition = useCallback(() => {
+    if (typeof window === 'undefined') return 'bottom'
+
+    const button = document.querySelector('.wallet-dropdown button')
+    if (!button) return 'bottom'
+
+    const rect = button.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+
+    // If there's more space below, show dropdown below
+    // If there's more space above, show dropdown above
+    return spaceBelow >= 300 || spaceBelow > spaceAbove ? 'bottom' : 'top'
   }, [])
 
   // Memoized computed values
@@ -266,7 +284,14 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
   if (!isConnected) {
     return (
       <div className="flex items-center space-x-4">
-        <WalletSelector />
+        {/* Simple Connect Button - redirects to wallet-actions page */}
+        <a
+          href="/wallet-actions"
+          className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
+        >
+          <span className="text-lg">🔗</span>
+          <span className="text-sm font-medium text-gray-900">Connect Wallet</span>
+        </a>
         <NetworkSelector />
       </div>
     )
@@ -297,7 +322,11 @@ const GlobalWalletManager = React.memo(function GlobalWalletManager() {
 
         {/* Wallet Dropdown Menu */}
         {showWalletDropdown && (
-          <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-gray-300 rounded-lg shadow-lg z-50">
+          <div className={`absolute left-0 w-80 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto ${
+            getDropdownPosition() === 'bottom'
+              ? 'top-full mt-1'
+              : 'bottom-full mb-1'
+          }`}>
             <div className="p-2">
               {/* Current Account Info */}
               <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-md">

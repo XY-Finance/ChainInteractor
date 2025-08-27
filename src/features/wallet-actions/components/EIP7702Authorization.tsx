@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { addresses } from '../../../config/addresses'
 import { sepolia } from 'viem/chains'

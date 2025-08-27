@@ -171,7 +171,7 @@ export abstract class BaseWallet implements WalletInterface {
     return null
   }
 
-  getCurrentNonce(): number | null {
+  async getCurrentNonce(): Promise<number | null> {
     // Base implementation - no nonce tracking
     return null
   }

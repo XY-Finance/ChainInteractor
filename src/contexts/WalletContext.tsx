@@ -354,7 +354,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       console.log('🔄 Context: Starting delegation check...');
       await walletManager.checkCurrentDelegation()
       const delegation = walletManager.getCurrentDelegation()
-      const nonce = walletManager.getCurrentNonce()
+      const nonce = await walletManager.getCurrentNonce()
 
       console.log(`🔄 Context: Setting delegation to: ${delegation || 'null'}`);
       console.log(`🔄 Context: Setting nonce to: ${nonce || 'null'}`);

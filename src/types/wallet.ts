@@ -63,7 +63,7 @@ export interface WalletInterface {
   // EIP-7702 delegation status methods
   checkCurrentDelegation?(): Promise<void>
   getCurrentDelegation?(): string | null
-  getCurrentNonce?(): number | null
+  getCurrentNonce?(): Promise<number | null>
 
   // Smart account methods
   createSmartAccount(): Promise<Address>

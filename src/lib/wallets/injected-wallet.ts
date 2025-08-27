@@ -442,7 +442,7 @@ export class InjectedWallet extends BaseWallet {
     return this.currentDelegation;
   }
 
-  getCurrentNonce(): number | null {
+  async getCurrentNonce(): Promise<number | null> {
     return this.currentNonce;
   }
 
