@@ -26,6 +26,8 @@ export class InjectedWallet extends BaseWallet {
   private onAccountChange?: (account: WalletAccount | null) => void
   private onNetworkChange?: (network: { chainId: number; name: string; isSupported: boolean }) => void
   private currentChainId: number | null = null
+  private currentDelegation: string | null = null
+  private currentNonce: number | null = null
 
   static async isAvailable(): Promise<boolean> {
     if (typeof window === 'undefined') return false
@@ -71,10 +73,12 @@ export class InjectedWallet extends BaseWallet {
       })
 
       // Set up account change listener
-      this.ethereum.on('accountsChanged', (accounts: string[]) => {
+      this.ethereum.on('accountsChanged', async (accounts: string[]) => {
         if (accounts.length === 0) {
           // User disconnected
           this.account = null
+          this.currentDelegation = null
+          this.currentNonce = null
           if (this.onAccountChange) {
             this.onAccountChange(null)
           }
@@ -82,6 +86,10 @@ export class InjectedWallet extends BaseWallet {
           // User switched accounts
           const newAddress = accounts[0] as Address
           this.account = this.createAccount(newAddress, 'injected')
+
+          // Refresh delegation status for the new account
+          await this.checkCurrentDelegation()
+
           if (this.onAccountChange) {
             this.onAccountChange(this.account)
           }
@@ -243,6 +251,65 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
+  // Override signPermit for ERC20 permit signing
+  async signPermit(amount: bigint): Promise<any> {
+    if (!this.ethereum || !this.account) {
+      throw new Error('No injected wallet connected')
+    }
+
+    // This is a simplified implementation
+    // In a real app, you'd need to get the token contract details and nonce
+    const domain = {
+      name: 'USDC',
+      version: '1',
+      chainId: 11155111, // Sepolia
+      verifyingContract: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' // Sepolia USDC
+    }
+
+    const types = {
+      Permit: [
+        { name: 'owner', type: 'address' },
+        { name: 'spender', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' }
+      ]
+    }
+
+    const message = {
+      owner: this.account.address,
+      spender: '0x856c363e043Ac34B19D584D3930bfa615947994E',
+      value: amount.toString(),
+      nonce: '0', // This should be fetched from the contract
+      deadline: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+    }
+
+    try {
+      const signature = await this.ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [this.account.address, JSON.stringify({
+          types,
+          primaryType: 'Permit',
+          domain,
+          message
+        })]
+      })
+
+      return {
+        owner: message.owner,
+        spender: message.spender,
+        value: message.value,
+        nonce: message.nonce,
+        deadline: message.deadline,
+        r: signature.slice(0, 66),
+        s: '0x' + signature.slice(66, 130),
+        v: parseInt(signature.slice(130, 132), 16)
+      }
+    } catch (error) {
+      throw new Error(`Failed to sign permit: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   // Override sign7702Authorization for MetaMask
   // Note: MetaMask doesn't expose sign7702Auth directly, but handles atomic batching through wallet_sendCalls
   async sign7702Authorization(authorizationData: any): Promise<any> {
@@ -279,7 +346,110 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
-    // Override submit7702Authorization to handle EIP-7702 authorization submission
+    // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    console.log('🔍 Starting delegation check...');
+
+    if (!this.ethereum) {
+      console.log('❌ No ethereum provider available');
+      this.currentDelegation = null;
+      this.currentNonce = null;
+      return;
+    }
+
+    if (!this.account) {
+      console.log('❌ No account connected');
+      this.currentDelegation = null;
+      this.currentNonce = null;
+      return;
+    }
+
+    try {
+      console.log(`🔍 Checking delegation for account: ${this.account.address}`);
+
+      // Get current account
+      const [from] = await this.ethereum.request({ method: 'eth_requestAccounts' });
+      console.log(`📋 Current account from provider: ${from}`);
+
+      // Check if the account has any code (indicating it might be a smart account)
+      const code = await this.ethereum.request({
+        method: 'eth_getCode',
+        params: [from, 'latest']
+      });
+      console.log(`📋 Account code: ${code}`);
+
+      // For EIP-7702, we need to check if the account has been delegated
+      // This is a simplified check - in a real implementation, you'd query the delegation contract
+      if (code === '0x' || code === '0x0') {
+        // Regular EOA - not delegated
+        this.currentDelegation = null;
+        console.log('✅ Account is not delegated (EOA)');
+      } else {
+        // Account has code - might be delegated
+        // For now, we'll assume it's delegated to the MetaMask deleGator
+        this.currentDelegation = addresses.delegatee.metamask;
+        console.log('✅ Account appears to be delegated');
+      }
+
+      // Get current nonce
+      const nonce = await this.ethereum.request({
+        method: 'eth_getTransactionCount',
+        params: [from, 'latest']
+      });
+
+      this.currentNonce = parseInt(nonce, 16);
+      console.log(`📊 Current nonce: ${this.currentNonce}`);
+      console.log(`📋 Final delegation status: ${this.currentDelegation || 'Not delegated'}`);
+
+      // Force a state update by calling the callback
+      if (this.onAccountChange) {
+        console.log('🔄 Triggering state update...');
+        this.onAccountChange(this.account);
+      }
+    } catch (error) {
+      console.error('❌ Failed to check current delegation:', error);
+      // Set to not delegated on error
+      this.currentDelegation = null;
+      this.currentNonce = null;
+    }
+  }
+
+  // Helper method to check delegation status by querying the delegation contract
+  private async checkDelegationStatus(accountAddress: string): Promise<string | null> {
+    try {
+      // Query the delegation contract to check if the account is delegated
+      // This would require the delegation contract ABI and proper contract calls
+      // For now, we'll use a simplified approach
+
+      // Check if the account has any code (indicating it might be a smart account)
+      const code = await this.ethereum.request({
+        method: 'eth_getCode',
+        params: [accountAddress, 'latest']
+      });
+
+      if (code === '0x' || code === '0x0') {
+        return null; // Not delegated
+      }
+
+      // If the account has code, we need to determine what it's delegated to
+      // This would require querying the specific delegation contract
+      // For now, we'll return the MetaMask deleGator address as a placeholder
+      return addresses.delegatee.metamask;
+    } catch (error) {
+      console.error('Error checking delegation status:', error);
+      return null;
+    }
+  }
+
+  getCurrentDelegation(): string | null {
+    return this.currentDelegation;
+  }
+
+  getCurrentNonce(): number | null {
+    return this.currentNonce;
+  }
+
+  // Override submit7702Authorization to handle EIP-7702 authorization submission
   async submit7702Authorization(signedAuthorization: any): Promise<Hex> {
     console.log('🔧 InjectedWallet.submit7702Authorization called with:', signedAuthorization)
 

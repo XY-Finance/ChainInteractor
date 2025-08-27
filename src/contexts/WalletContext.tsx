@@ -12,6 +12,11 @@ interface WalletContextType {
   error: string | null
   availableWallets: WalletConfig[]
   capabilities: any
+  currentDelegation: string | null
+  currentNonce: number | null
+  address: string | null
+  publicClient: any | null
+  walletClient: any | null
 
   // Actions
   connectWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
@@ -20,6 +25,7 @@ interface WalletContextType {
   signMessage: (message: string) => Promise<any>
   signTypedData: (domain: any, types: any, message: any) => Promise<any>
   sendTransaction: (transaction: any) => Promise<any>
+  signPermit: (amount: bigint) => Promise<any>
   sign7702Authorization: (authorizationData: any) => Promise<any>
   submit7702Authorization: (signedAuthorization: any) => Promise<any>
   getAvailableDelegatees: (currentDelegations: string, options: any[]) => any[]
@@ -27,6 +33,7 @@ interface WalletContextType {
   getDelegateeOptions: (currentDelegations: string, options: any[]) => any[]
   getDelegateeSupportInfo: (delegateeAddress: string) => { isSupported: boolean; reason?: string }
   getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => Array<any & { isSupported: boolean; reason?: string }>
+  checkCurrentDelegation: () => Promise<void>
 
   createSmartAccount: () => Promise<any>
   sendUserOperation: (userOp: any) => Promise<any>
@@ -61,6 +68,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [availableWallets, setAvailableWallets] = useState<WalletConfig[]>([])
+  const [currentDelegation, setCurrentDelegation] = useState<string | null>(null)
+  const [currentNonce, setCurrentNonce] = useState<number | null>(null)
 
   // Prevent hydration issues
   useEffect(() => {
@@ -192,6 +201,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
+  const signPermit = useCallback(async (amount: bigint) => {
+    if (!isConnected) {
+      throw new Error('No wallet connected')
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      return await walletManager.signPermit(amount)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign permit'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [walletManager, isConnected])
+
   const sendTransaction = useCallback(async (transaction: any) => {
     if (!isConnected) {
       throw new Error('No wallet connected')
@@ -311,6 +339,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return walletManager.getWalletClient()
   }, [walletManager])
 
+  // EIP-7702 delegation status
+  const checkCurrentDelegation = useCallback(async () => {
+    try {
+      console.log('🔄 Context: Starting delegation check...');
+      await walletManager.checkCurrentDelegation()
+      const delegation = walletManager.getCurrentDelegation()
+      const nonce = walletManager.getCurrentNonce()
+
+      console.log(`🔄 Context: Setting delegation to: ${delegation || 'null'}`);
+      console.log(`🔄 Context: Setting nonce to: ${nonce || 'null'}`);
+
+      setCurrentDelegation(delegation)
+      setCurrentNonce(nonce)
+    } catch (error) {
+      console.error('❌ Context: Failed to check current delegation:', error)
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+    }
+  }, [walletManager])
+
   // Clear error
   const clearError = useCallback(() => {
     setError(null)
@@ -322,6 +370,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     updateState()
   }, [updateState, mounted])
 
+  // Check delegation when wallet connects or changes
+  useEffect(() => {
+    if (isConnected && currentAccount) {
+      checkCurrentDelegation()
+    } else {
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+    }
+  }, [isConnected, currentAccount, checkCurrentDelegation])
+
   const value: WalletContextType = {
     // State
     isConnected,
@@ -330,6 +388,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     error,
     availableWallets,
     capabilities,
+    currentDelegation,
+    currentNonce,
+    address: currentAccount?.address || null,
+    publicClient: isConnected ? getPublicClient() : null,
+    walletClient: isConnected ? getWalletClient() : null,
 
     // Actions
     connectWallet,
@@ -337,6 +400,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     switchWallet,
     signMessage,
     signTypedData,
+    signPermit,
     sendTransaction,
     sign7702Authorization,
     submit7702Authorization,
@@ -347,6 +411,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getPublicClient,
     getWalletClient,
     clearError,
+    checkCurrentDelegation,
     getAvailableDelegatees: (currentDelegations: string, options: any[]) => walletManager.getAvailableDelegatees(currentDelegations, options),
     isDelegateeSupported: (delegateeAddress: string) => walletManager.isDelegateeSupported(delegateeAddress),
     getDelegateeOptions: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptions(currentDelegations, options),

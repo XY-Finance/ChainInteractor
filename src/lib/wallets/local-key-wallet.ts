@@ -119,6 +119,33 @@ export class LocalKeyWallet extends BaseWallet {
     return data.signature
   }
 
+  // Override signPermit to use server API
+  async signPermit(amount: bigint): Promise<any> {
+    const account = await this.getAccount()
+    if (!account) {
+      throw new Error('No account connected')
+    }
+
+    // Use server API to sign permit
+    const response = await fetch('/api/wallet-operations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: 'signPermit',
+        keyIndex: account.keyIndex,
+        amount: amount.toString()
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to sign permit')
+    }
+
+    const data = await response.json()
+    return data.permit
+  }
+
   async connect(): Promise<WalletAccount> {
     if (this.availableKeys.length === 0) {
       throw new Error('Environment private key wallet is unavailable. No valid private keys found in PRIVATE_KEYS environment variable.')
@@ -294,6 +321,22 @@ export class LocalKeyWallet extends BaseWallet {
       console.error('❌ Failed to check wallet availability:', error)
       return false
     }
+  }
+
+  // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    // Local key wallet doesn't support delegation checking
+    // This is primarily for injected wallets
+  }
+
+  getCurrentDelegation(): string | null {
+    // Local key wallet doesn't support delegation
+    return null
+  }
+
+  getCurrentNonce(): number | null {
+    // Local key wallet doesn't track nonce
+    return null
   }
 
   // Helper method to get wallet info

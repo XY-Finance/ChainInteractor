@@ -98,6 +98,11 @@ export abstract class BaseWallet implements WalletInterface {
     })
   }
 
+  async signPermit(amount: bigint): Promise<any> {
+    // This method must be implemented by specific wallet types
+    throw new Error('signPermit not implemented for this wallet type')
+  }
+
   // EIP-7702 specific methods
   async sign7702Authorization(authorizationData: any): Promise<Hex> {
     if (!this.walletClient) {
@@ -160,6 +165,22 @@ export abstract class BaseWallet implements WalletInterface {
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)
     }))
+  }
+
+  // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    // Base implementation - no delegation checking
+    // Override in specific wallet implementations
+  }
+
+  getCurrentDelegation(): string | null {
+    // Base implementation - no delegation
+    return null
+  }
+
+  getCurrentNonce(): number | null {
+    // Base implementation - no nonce tracking
+    return null
   }
 
   // Smart account methods

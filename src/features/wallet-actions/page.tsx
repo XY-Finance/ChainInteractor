@@ -1,932 +1,213 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePublicClient } from 'wagmi'
 import { useWalletManager } from '../../hooks/useWalletManager'
-import {
-  parseEther,
-  formatEther,
-  type Address,
-  type Hex,
-  encodePacked,
-  keccak256,
-  toHex,
-  parseUnits,
-  formatUnits
-} from 'viem'
-import { sepolia } from 'viem/chains'
-import {
-  Implementation,
-  toMetaMaskSmartAccount,
-  getDeleGatorEnvironment,
-} from '@metamask/delegation-toolkit'
-import { addresses } from '../../config/addresses'
+import WalletStatus from './components/WalletStatus'
+import UseCaseCard from './components/UseCaseCard'
+import EIP7702Authorization from './components/EIP7702Authorization'
+import ERC20Permit from './components/ERC20Permit'
+import OperationLogs from './components/OperationLogs'
 
-interface PermitData {
-  owner: Address
-  spender: Address
-  value: bigint
-  nonce: bigint
-  deadline: bigint
-}
-
-interface ERC20Permit {
-  token: string
-  name: string
-  symbol: string
-  decimals: number
-  permitData: PermitData
-}
-
-interface DelegateeContract {
-  name: string
-  address: Address
-  description: string
-  implementation?: Implementation
-}
-
-const DELEGATEE_CONTRACTS: DelegateeContract[] = [
-  {
-    name: 'MetaMask deleGator Core',
-    address: addresses.delegatee.metamask,
-    description: 'Core MetaMask deleGator implementation for EIP-7702',
-    implementation: Implementation.Stateless7702
-  },
-  {
-    name: 'Revoke Authorization',
-    address: addresses.common.zero,
-    description: 'Remove/revoke EIP-7702 authorization by setting to zero address',
-  }
-]
-
-const COMMON_TOKENS = [
-  {
-    name: 'USDC',
-    symbol: 'USDC',
-    address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // Sepolia USDC
-    decimals: 6
-  },
-  {
-    name: 'WETH',
-    symbol: 'WETH',
-    address: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9', // Sepolia WETH
-    decimals: 18
-  },
-  {
-    name: 'DAI',
-    symbol: 'DAI',
-    address: '0x68194a729C2450ad26072b3D33ADaCbcef39D574', // Sepolia DAI
-    decimals: 18
-  }
-]
-
+// Use case definitions
 const COMMON_USE_CASES = [
   {
-    id: 'erc20-permit',
-    name: 'ERC20 Permit',
-    description: 'Sign ERC20 permit for gasless token approvals',
-    icon: '🪙',
-    category: 'Token Approvals',
-    status: 'ready'
-  },
-  {
-    id: 'delegation',
-    name: 'Delegation',
-    description: 'Delegate voting power to another address (TBA)',
-    icon: '️',
-    category: 'Governance',
-    status: 'tba'
-  },
-  {
-    id: 'authorization',
-    name: 'Authorization',
-    description: 'Authorize contract to act on your behalf (TBA)',
-    icon: '🔐',
-    category: 'Access Control',
-    status: 'tba'
-  },
-  {
-    id: 'signature',
-    name: 'Message Signature',
-    description: 'Sign arbitrary messages for verification (TBA)',
-    icon: '✍️',
-    category: 'General',
-    status: 'tba'
-  },
-  {
-    id: 'typed-data',
-    name: 'Typed Data (EIP-712)',
-    description: 'Sign structured data with EIP-712 (TBA)',
-    icon: '📋',
-    category: 'Advanced',
-    status: 'tba'
+    id: 'erc20permit',
+    title: 'ERC20 Permit',
+    description: 'Sign gasless token approvals using EIP-712 signatures',
+    status: 'ready' as const
   },
   {
     id: 'eip7702',
-    name: 'EIP-7702 Authorization',
-    description: 'Sign EIP-7702 authorization messages',
-    icon: '🔗',
-    category: 'Advanced',
-    status: 'ready'
+    title: 'EIP-7702 Authorization',
+    description: 'Delegate control over your EOA to smart contracts',
+    status: 'ready' as const
+  },
+  {
+    id: 'eip2612',
+    title: 'EIP-2612 Permit',
+    description: 'Gasless token approvals with deadline-based permits',
+    status: 'tba' as const
+  },
+  {
+    id: 'eip4361',
+    title: 'EIP-4361 Sign-In',
+    description: 'Sign-in with Ethereum for decentralized authentication',
+    status: 'tba' as const
+  },
+  {
+    id: 'eip1271',
+    title: 'EIP-1271 Contract Verification',
+    description: 'Verify signatures from smart contract wallets',
+    status: 'tba' as const
+  },
+  {
+    id: 'eip191',
+    title: 'EIP-191 Personal Sign',
+    description: 'Standard personal message signing with prefix',
+    status: 'tba' as const
   }
 ]
 
 export default function WalletActionsPage() {
-  const { isConnected, currentAccount, signMessage, signTypedData } = useWalletManager()
-  const publicClient = usePublicClient()
+  const {
+    currentAccount,
+    currentDelegation,
+    currentNonce,
+    checkCurrentDelegation
+  } = useWalletManager()
 
-  const [selectedToken, setSelectedToken] = useState(COMMON_TOKENS[0])
+  // State management
   const [selectedUseCase, setSelectedUseCase] = useState(COMMON_USE_CASES[0])
-  const [spenderAddress, setSpenderAddress] = useState('0x856c363e043Ac34B19D584D3930bfa615947994E')
-  const [amount, setAmount] = useState('1')
-  const [deadline, setDeadline] = useState('2756099813')
-  const [signature, setSignature] = useState<string>('')
-  const [isSigning, setIsSigning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
-  const [customMessage, setCustomMessage] = useState('')
-  const [typedData, setTypedData] = useState('')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isActionsExpanded, setIsActionsExpanded] = useState(true)
 
-  // EIP-7702 state variables
-  const [selectedContract, setSelectedContract] = useState<DelegateeContract | null>(null)
-  const [authorizationHash, setAuthorizationHash] = useState<any>(null)
-  const [signedAuthorization, setSignedAuthorization] = useState<any>(null)
-  const [isAuthorizing, setIsAuthorizing] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [transactionHash, setTransactionHash] = useState<string>('')
-  const [smartAccountAddress, setSmartAccountAddress] = useState<string>('')
-  const [userOpHash, setUserOpHash] = useState<string>('')
-  const [isSendingUserOp, setIsSendingUserOp] = useState(false)
-  const [recipientAddress, setRecipientAddress] = useState('')
-  const [eip7702Amount, setEip7702Amount] = useState('')
-  const [currentDelegation, setCurrentDelegation] = useState<string>('')
-  const [isCheckingDelegation, setIsCheckingDelegation] = useState(false)
-  const [verificationResult, setVerificationResult] = useState<any>(null)
-  const [currentNonce, setCurrentNonce] = useState<number | null>(null)
-
-  const address = currentAccount?.address
-  const walletType = currentAccount?.type
-
-  useEffect(() => {
-    // Set default deadline to 1 hour from now
-    // const oneHourFromNow = Math.floor(Date.now() / 1000) + 3600
-    // setDeadline(oneHourFromNow.toString())
-  }, [])
-
-  // Initialize EIP-7702 contracts and check delegation status
-  useEffect(() => {
-    const initializeEIP7702 = async () => {
-      if (!publicClient) return
-
-      try {
-        const environment = getDeleGatorEnvironment(sepolia.id)
-        const contractAddress = environment.implementations.EIP7702StatelessDeleGatorImpl
-
-        DELEGATEE_CONTRACTS[0].address = contractAddress
-
-        addLog(`✅ Initialized EIP-7702 delegatee contracts`)
-        addLog(`📋 MetaMask deleGator Core: ${contractAddress}`)
-      } catch (error) {
-        addLog(`❌ Error initializing EIP-7702 contracts: ${error}`)
-      }
-    }
-
-    initializeEIP7702()
-  }, [publicClient])
-
-  // Check current delegation status when address changes
-  useEffect(() => {
-    if (address && publicClient) {
-      checkCurrentDelegation()
-    }
-  }, [address, publicClient])
-
+  // Add timestamp to log messages
   const addLog = (message: string) => {
-    setLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
+    const timestamp = new Date().toLocaleTimeString()
+    const logMessage = `${timestamp}: ${message}`
+    setLogs(prev => [...prev, logMessage])
   }
 
-  const generatePermitData = async (): Promise<PermitData> => {
-    if (!address || !publicClient) {
-      throw new Error('Wallet not connected or public client not available')
-    }
+  // Refresh wallet status
+  const handleRefreshStatus = async () => {
+    if (!currentAccount) return
+
+    setIsRefreshing(true)
+    addLog('🔄 Refreshing wallet status...')
 
     try {
-      addLog(`🔍 Calling nonces(${address}) on ${selectedToken.symbol} at ${selectedToken.address}...`)
-
-      const nonce = await publicClient.readContract({
-        address: selectedToken.address as Address,
-        abi: [{
-          name: 'nonces',
-          type: 'function',
-          stateMutability: 'view',
-          inputs: [{ name: 'owner', type: 'address' }],
-          outputs: [{ name: '', type: 'uint256' }]
-        }],
-        functionName: 'nonces',
-        args: [address as Address]
-      })
-
-      addLog(`✅ Got nonce: ${nonce}`)
-
-      return {
-        owner: address as Address,
-        spender: spenderAddress as Address,
-        value: parseUnits(amount, selectedToken.decimals),
-        nonce: nonce as bigint,
-        deadline: BigInt(deadline)
-      }
+      await checkCurrentDelegation()
+      addLog('✅ Wallet status refreshed successfully')
     } catch (error) {
-      addLog(`❌ Failed to get nonce: ${error}`)
-      addLog(`🔍 Error details: ${JSON.stringify(error, null, 2)}`)
-      throw new Error(`Failed to get nonce for ${selectedToken.symbol}. This token may not support ERC20Permit.`)
-    }
-  }
-
-  const getTokenVersion = async (): Promise<string> => {
-    if (!publicClient) {
-      throw new Error('Public client not available')
-    }
-
-    try {
-      return await publicClient.readContract({
-        address: selectedToken.address as Address,
-        abi: [{
-          name: 'version',
-          type: 'function',
-          stateMutability: 'view',
-          inputs: [],
-          outputs: [{ name: '', type: 'string' }]
-        }],
-        functionName: 'version'
-      }) as string
-    } catch (error) {
-      console.warn(`⚠️ Failed to get token version for ${selectedToken.symbol}:`, error)
-      throw new Error(`Token version not available for ${selectedToken.symbol}. This may not be a standard ERC20Permit token.`)
-    }
-  }
-
-  const signERC20Permit = async () => {
-    if (!isConnected || !address) {
-      addLog('❌ Please connect your wallet first')
-      return
-    }
-
-    if (!spenderAddress || !amount || !deadline) {
-      addLog('❌ Please fill in all required fields')
-      return
-    }
-
-    setIsSigning(true)
-    addLog(`🪙 Signing ERC20 permit for ${selectedToken.symbol}...`)
-
-    try {
-      const permitData = await generatePermitData()
-      const tokenVersion = await getTokenVersion()
-
-      addLog(`📝 Permit data:`)
-      addLog(`   - Owner: ${permitData.owner}`)
-      addLog(`   - Spender: ${permitData.spender}`)
-      addLog(`   - Value: ${formatUnits(permitData.value, selectedToken.decimals)} ${selectedToken.symbol}`)
-      addLog(`   - Nonce: ${permitData.nonce}`)
-      addLog(`   - Deadline: ${new Date(Number(permitData.deadline) * 1000).toLocaleString()}`)
-      addLog(`   - Token Version: ${tokenVersion}`)
-
-      // Create the permit message to sign following EIP-2612 pattern
-      const domain = {
-        name: selectedToken.name,
-        version: tokenVersion,
-        chainId: sepolia.id.toString(),
-        verifyingContract: selectedToken.address as Address
-      }
-
-      const types = {
-        EIP712Domain: [
-          { name: 'name', type: 'string' },
-          { name: 'version', type: 'string' },
-          { name: 'chainId', type: 'uint256' },
-          { name: 'verifyingContract', type: 'address' }
-        ],
-        Permit: [
-          { name: 'owner', type: 'address' },
-          { name: 'spender', type: 'address' },
-          { name: 'value', type: 'uint256' },
-          { name: 'nonce', type: 'uint256' },
-          { name: 'deadline', type: 'uint256' }
-        ]
-      }
-
-      // Convert BigInt values to strings for JSON serialization
-      const message = {
-        owner: permitData.owner,
-        spender: permitData.spender,
-        value: permitData.value.toString(),
-        nonce: permitData.nonce.toString(),
-        deadline: permitData.deadline.toString()
-      }
-
-      // Log the complete EIP-712 data structure
-      addLog(`🔍 EIP-712 Typed Data Structure:`)
-      addLog(`📋 Types: ${JSON.stringify(types, null, 2)}`)
-      addLog(`🌐 Domain: ${JSON.stringify(domain, null, 2)}`)
-      addLog(`💬 Message: ${JSON.stringify(message, null, 2)}`)
-
-      // Use proper EIP-712 signing for ERC20 permits
-      const sig = await signTypedData(domain, types, message)
-      setSignature(sig)
-
-      addLog(`✅ Permit signed successfully!`)
-      addLog(`🔐 Signature: ${sig}`)
-
-      // Split signature for permit() function
-      const r = sig.slice(0, 66)
-      const s = '0x' + sig.slice(66, 130)
-      const v = parseInt(sig.slice(130, 132), 16)
-
-      addLog(`📊 Signature components for permit():`)
-      addLog(`   - V: ${v}`)
-      addLog(`   - R: ${r}`)
-      addLog(`   - S: ${s}`)
-
-      addLog(`🚀 This signature can be used to call permit() on the ${selectedToken.symbol} contract`)
-      addLog(`📝 permit(${permitData.owner}, ${permitData.spender}, ${permitData.value.toString()}, ${permitData.deadline.toString()}, ${v}, ${r}, ${s})`)
-    } catch (error) {
-      addLog(`❌ Failed to sign permit: ${error}`)
+      addLog(`❌ Failed to refresh wallet status: ${error}`)
     } finally {
-      setIsSigning(false)
+      setIsRefreshing(false)
     }
   }
 
-  const signCustomMessage = async () => {
-    if (!isConnected || !address) {
-      addLog('❌ Please connect your wallet first')
-      return
-    }
-
-    if (!customMessage.trim()) {
-      addLog('❌ Please enter a message to sign')
-      return
-    }
-
-    setIsSigning(true)
-    addLog(`✍️ Signing custom message...`)
-
-    try {
-      addLog(`📝 Message to sign: "${customMessage}"`)
-      addLog(`👤 Signer address: ${address}`)
-
-      const sig = await signMessage(customMessage)
-      setSignature(sig)
-
-      addLog(`✅ Message signed successfully!`)
-      addLog(`🔐 Signature: ${sig}`)
-
-      // Split signature components
-      const r = sig.slice(0, 66)
-      const s = '0x' + sig.slice(66, 130)
-      const v = parseInt(sig.slice(130, 132), 16)
-
-      addLog(`📊 Signature components:`)
-      addLog(`   - V: ${v}`)
-      addLog(`   - R: ${r}`)
-      addLog(`   - S: ${s}`)
-    } catch (error) {
-      addLog(`❌ Failed to sign message: ${error}`)
-    } finally {
-      setIsSigning(false)
-    }
+  // Handle use case selection
+  const handleUseCaseSelect = (useCase: typeof COMMON_USE_CASES[0]) => {
+    setSelectedUseCase(useCase)
+    addLog(`📋 Selected use case: ${useCase.title}`)
   }
 
-  const signTypedDataFunction = async () => {
-    if (!isConnected || !address) {
-      addLog('❌ Please connect your wallet first')
+  // Handle use case action
+  const handleUseCaseAction = (useCase: typeof COMMON_USE_CASES[0]) => {
+    if (useCase.status === 'tba') {
+      addLog(`⏳ ${useCase.title} - Coming Soon!`)
       return
     }
 
-    if (!typedData.trim()) {
-      addLog('❌ Please enter typed data to sign')
-      return
-    }
-
-    setIsSigning(true)
-    addLog(`📋 Signing typed data...`)
-
-    try {
-      // Parse the typed data JSON
-      const parsedData = JSON.parse(typedData)
-      const { domain, types, message } = parsedData
-
-      addLog(`🔍 Parsed Typed Data Structure:`)
-      addLog(`📋 Types: ${JSON.stringify(types, null, 2)}`)
-      addLog(`🌐 Domain: ${JSON.stringify(domain, null, 2)}`)
-      addLog(`💬 Message: ${JSON.stringify(message, null, 2)}`)
-
-      // Convert any BigInt values in the message to strings
-      const serializedMessage = JSON.parse(JSON.stringify(message, (key, value) => {
-        if (typeof value === 'bigint') {
-          return value.toString()
-        }
-        return value
-      }))
-
-      addLog(`🔄 Serialized Message: ${JSON.stringify(serializedMessage, null, 2)}`)
-
-      const sig = await signTypedData(domain, types, serializedMessage)
-      setSignature(sig)
-
-      addLog(`✅ Typed data signed successfully!`)
-      addLog(`🔐 Signature: ${sig}`)
-
-      // Split signature components
-      const r = sig.slice(0, 66)
-      const s = '0x' + sig.slice(66, 130)
-      const v = parseInt(sig.slice(130, 132), 16)
-
-      addLog(`📊 Signature components:`)
-      addLog(`   - V: ${v}`)
-      addLog(`   - R: ${r}`)
-      addLog(`   - S: ${s}`)
-    } catch (error) {
-      addLog(`❌ Failed to sign typed data: ${error}`)
-    } finally {
-      setIsSigning(false)
-    }
+    setSelectedUseCase(useCase)
+    addLog(`🚀 Starting ${useCase.title}...`)
   }
 
-  const handleUseCaseAction = async () => {
-    if (selectedUseCase.status === 'tba') {
-      addLog(`⚠️ ${selectedUseCase.name} is not yet implemented (TBA)`)
-      return
+  // Check delegation status on mount
+  useEffect(() => {
+    if (currentAccount) {
+      checkCurrentDelegation().catch(console.error)
     }
-
-    switch (selectedUseCase.id) {
-      case 'erc20-permit':
-        await signERC20Permit()
-        break
-      case 'signature':
-        await signCustomMessage()
-        break
-      case 'typed-data':
-        await signTypedDataFunction()
-        break
-      case 'eip7702':
-        await authorize7702()
-        break
-      default:
-        addLog(`⚠️ ${selectedUseCase.name} not yet implemented`)
-    }
-  }
-
-  // EIP-7702 Functions
-  const checkCurrentDelegation = async () => {
-    if (!address || !publicClient) return
-
-    setIsCheckingDelegation(true)
-    try {
-      const code = await publicClient.getCode({ address: address as Address })
-      console.log('🔍 Code:', code)
-
-      if (!code || code === '0x') {
-        setCurrentDelegation(addresses.common.zero)
-        addLog('📋 Current delegation: None (no delegation)')
-      } else if (code.startsWith('0xef0100')) {
-        const contractAddress = '0x' + code.slice(8)
-        setCurrentDelegation(contractAddress)
-        addLog(`📋 Current delegation: Contract ${contractAddress}`)
-      } else {
-        setCurrentDelegation(code)
-        addLog(`📋 Current delegation: Unknown contract (${code})`)
-      }
-
-      const nonce = await publicClient.getTransactionCount({ address: address as Address })
-      setCurrentNonce(nonce)
-      addLog(`📊 Current transaction count (nonce): ${nonce}`)
-    } catch (error) {
-      addLog(`❌ Error checking delegation: ${error}`)
-      setCurrentDelegation('')
-      setCurrentNonce(null)
-    } finally {
-      setIsCheckingDelegation(false)
-    }
-  }
-
-  const authorize7702 = async () => {
-    if (!isConnected || !currentAccount) {
-      addLog('❌ Please connect your wallet first')
-      return
-    }
-
-    if (!selectedContract || !address || !publicClient) {
-      addLog('❌ Selected contract, address, or public client not available')
-      return
-    }
-
-    const isRevocation = selectedContract.address === addresses.common.zero
-    setIsAuthorizing(true)
-    addLog(`🔐 Starting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
-
-    try {
-      const nonce = await publicClient.getTransactionCount({ address })
-      addLog(`📊 Current nonce: ${nonce}`)
-
-      const authorizationData = {
-        address: address as `0x${string}`,
-        chainId: sepolia.id,
-        contractAddress: selectedContract.address,
-        executor: 'self' as const,
-      }
-
-      addLog(`📝 ${isRevocation ? 'Revocation' : 'Authorization'} data structure:`)
-      addLog(`   - Address: ${authorizationData.address}`)
-      addLog(`   - Chain ID: ${authorizationData.chainId}`)
-      addLog(`   - Nonce: ${authorizationData.executor == 'self' ? nonce + 1 : nonce}`)
-      addLog(`   - Contract: ${authorizationData.contractAddress}`)
-      addLog(`   - Executor: ${authorizationData.executor}`)
-
-      setAuthorizationHash(authorizationData)
-      setSignedAuthorization(null)
-      addLog(`✅ ${isRevocation ? 'Revocation' : 'Authorization'} data prepared successfully`)
-      addLog(`📝 Ready to sign ${isRevocation ? 'revocation' : 'authorization'}`)
-    } catch (error) {
-      addLog(`❌ Authorization failed: ${error}`)
-    } finally {
-      setIsAuthorizing(false)
-    }
-  }
-
-  const getWalletDisplayName = (type: string) => {
-    switch (type) {
-      case 'injected':
-        return 'MetaMask'
-      case 'local':
-        return 'Local Key'
-      default:
-        return type
-    }
-  }
+  }, [currentAccount, checkCurrentDelegation])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-primary mb-4">
-             Wallet Actions Hub
-          </h1>
-          <p className="text-lg text-secondary max-w-3xl mx-auto">
-            Sign ERC20 permits, delegations, and other common authorization messages with any connected wallet.
-            This hub provides a comprehensive interface for various signing use cases.
-          </p>
-        </div>
-
-        {/* Main Content */}
-        <div className="card mb-8 shadow-lg">
-          <h2 className="text-2xl font-bold text-primary mb-6">
-            Wallet Actions Hub
-          </h2>
-
-          {!isConnected ? (
-            <div className="text-center py-12">
-              <div className="card bg-orange-50 border-orange-200 max-w-md mx-auto">
-                <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                  🔐 Connect Your Wallet First
-                </h3>
-                <p className="text-orange-800 text-sm mb-4">
-                  Please connect your wallet using the dropdown in the top right to start signing permits and authorizations.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Connected Wallet Info */}
-              {isConnected && address && (
-                <div className="card bg-blue-50 border-blue-200 mb-6">
-                  <h3 className="text-lg font-semibold text-blue-900 mb-2">Connected Wallet</h3>
-                  <p className="text-blue-800 text-sm">
-                    <strong>Type:</strong> {getWalletDisplayName(walletType || 'unknown')}
-                  </p>
-                  <p className="text-blue-800 text-sm">
-                    <strong>Address:</strong> {address}
-                  </p>
-                  <p className="text-blue-800 text-sm mt-2">
-                    ✅ Wallet connected! You can now sign ERC20 permits, custom messages, and EIP-712 typed data.
-                  </p>
-                </div>
-              )}
-
-              {/* Use Case Selection */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-primary">Select Use Case</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {COMMON_USE_CASES.map((useCase) => (
-                    <div
-                      key={useCase.id}
-                      className={`p-4 border rounded-lg transition-colors ${
-                        useCase.status === 'tba'
-                          ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
-                          : selectedUseCase.id === useCase.id
-                          ? 'border-orange-500 bg-orange-50 cursor-pointer'
-                          : 'border-gray-200 hover:border-gray-300 cursor-pointer'
-                      }`}
-                      onClick={() => useCase.status === 'ready' && setSelectedUseCase(useCase)}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-2xl">{useCase.icon}</span>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium text-primary">{useCase.name}</h4>
-                            {useCase.status === 'tba' && (
-                              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
-                                TBA
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-secondary">{useCase.description}</p>
-                          <span className="text-xs text-muted bg-gray-100 px-2 py-1 rounded mt-1 inline-block">
-                            {useCase.category}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ERC20 Permit Section */}
-              {selectedUseCase.id === 'erc20-permit' && (
-                <div className="space-y-6">
-                  <h3 className="text-lg font-semibold text-primary">ERC20 Permit Configuration</h3>
-
-                  {/* Token Selection */}
-                  <div className="space-y-4">
-                    <label className="block text-sm font-medium text-gray-700">Select Token</label>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {COMMON_TOKENS.map((token) => (
-                        <div
-                          key={token.address}
-                          className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                            selectedToken.address === token.address
-                              ? 'border-orange-500 bg-orange-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          onClick={() => setSelectedToken(token)}
-                        >
-                          <div className="text-center">
-                            <h4 className="font-medium text-primary">{token.symbol}</h4>
-                            <p className="text-sm text-secondary">{token.name}</p>
-                            <p className="text-xs text-muted font-mono mt-1">
-                              {token.address.slice(0, 6)}...{token.address.slice(-4)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Permit Parameters */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Spender Address
-                      </label>
-                      <input
-                        type="text"
-                        value={spenderAddress}
-                        onChange={(e) => setSpenderAddress(e.target.value)}
-                        placeholder="0x..."
-                        className="input-base"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Amount
-                      </label>
-                      <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="100"
-                        step="0.000001"
-                        className="input-base"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Deadline (Unix timestamp)
-                    </label>
-                    <input
-                      type="number"
-                      value={deadline}
-                      onChange={(e) => setDeadline(e.target.value)}
-                      placeholder="1234567890"
-                      className="input-base"
-                    />
-                    <p className="text-xs text-muted mt-1">
-                      Current deadline: {deadline ? new Date(Number(deadline) * 1000).toLocaleString() : 'Not set'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Custom Message Section */}
-              {selectedUseCase.id === 'signature' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-primary">Custom Message</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Message to Sign
-                    </label>
-                    <textarea
-                      value={customMessage}
-                      onChange={(e) => setCustomMessage(e.target.value)}
-                      placeholder="Enter your message here..."
-                      rows={4}
-                      className="input-base"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Typed Data Section */}
-              {selectedUseCase.id === 'typed-data' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-primary">Typed Data (EIP-712)</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Typed Data JSON
-                    </label>
-                    <textarea
-                      value={typedData}
-                      onChange={(e) => setTypedData(e.target.value)}
-                      placeholder='{"types": {...}, "primaryType": "...", "domain": {...}, "message": {...}}'
-                      rows={6}
-                      className="input-base font-mono text-sm"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* EIP-7702 Section */}
-              {selectedUseCase.id === 'eip7702' && (
-                <div className="space-y-6">
-                  <h3 className="text-lg font-semibold text-primary">EIP-7702 Authorization</h3>
-
-                  {/* Contract Selection */}
-                  <div className="space-y-4">
-                    <label className="block text-sm font-medium text-gray-700">Select Delegatee Contract</label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {DELEGATEE_CONTRACTS.map((contract) => (
-                        <div
-                          key={contract.address}
-                          className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                            selectedContract?.address === contract.address
-                              ? 'border-orange-500 bg-orange-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          onClick={() => setSelectedContract(contract)}
-                        >
-                          <div className="text-center">
-                            <h4 className="font-medium text-primary">{contract.name}</h4>
-                            <p className="text-sm text-secondary">{contract.description}</p>
-                            <p className="text-xs text-muted font-mono mt-1">
-                              {contract.address.slice(0, 6)}...{contract.address.slice(-4)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Current Delegation Status */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-2">Current Delegation Status</h4>
-                    <p className="text-blue-800 text-sm">
-                      <strong>Address:</strong> {address || 'Not connected'}
-                    </p>
-                    <p className="text-blue-800 text-sm">
-                      <strong>Current Delegation:</strong> {currentDelegation || 'Checking...'}
-                    </p>
-                    <p className="text-blue-800 text-sm">
-                      <strong>Nonce:</strong> {currentNonce !== null ? currentNonce : 'Checking...'}
-                    </p>
-                    <button
-                      onClick={checkCurrentDelegation}
-                      disabled={isCheckingDelegation}
-                      className="mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 disabled:opacity-50"
-                    >
-                      {isCheckingDelegation ? 'Checking...' : 'Refresh Status'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Button */}
-              <div className="pt-6 border-t">
-                {selectedUseCase.status === 'tba' ? (
-                  <div className="text-center py-6">
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <h3 className="text-lg font-semibold text-yellow-900 mb-2">
-                        🚧 Coming Soon
-                      </h3>
-                      <p className="text-yellow-800 text-sm">
-                        {selectedUseCase.name} functionality is currently under development and will be available soon.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleUseCaseAction}
-                    disabled={isSigning}
-                    className="btn-primary w-full px-6 py-3"
-                  >
-                    {isSigning ? 'Signing...' : `Sign ${selectedUseCase.name}`}
-                  </button>
-                )}
-              </div>
-
-              {/* Signature Display */}
-              {signature && (
-                <div className="card bg-green-50 border-green-200">
-                  <h4 className="text-sm font-semibold text-green-900 mb-2">Signature</h4>
-                  <p className="text-xs text-green-800 font-mono break-all">{signature}</p>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Logs Section */}
-        <div className="card mb-8 shadow-lg">
-          <h2 className="text-2xl font-bold text-primary mb-4">
-            Operation Logs
-          </h2>
-          <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-64 overflow-y-auto">
-            {logs.length === 0 ? (
-              <p className="text-muted">No logs yet. Connect your wallet to get started.</p>
-            ) : (
-              logs.map((log, index) => (
-                <div key={index} className="mb-1">
-                  {log}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Information Section */}
-        <div className="card shadow-lg">
-          <h2 className="text-2xl font-bold text-primary mb-4">
-            About Wallet Actions & Authorizations
-          </h2>
-          <div className="prose prose-gray max-w-none">
-            <p className="text-secondary mb-4">
-              This hub provides a comprehensive interface for signing various types of authorization messages with any connected wallet.
-              From ERC20 permits for gasless token approvals to custom message signatures and EIP-712 typed data.
-            </p>
-
-            <div className="grid md:grid-cols-2 gap-6 mt-6">
-              <div className="card bg-blue-50 border-blue-200">
-                <h3 className="text-lg font-semibold text-blue-900 mb-2">ERC20 Permit ✅</h3>
-                <p className="text-blue-800 text-sm">
-                  Sign permits to allow contracts to spend your tokens without requiring a separate approval transaction.
-                  This enables gasless token interactions.
-                </p>
-              </div>
-
-              <div className="card bg-purple-50 border-purple-200">
-                <h3 className="text-lg font-semibold text-purple-900 mb-2">EIP-7702 Authorization ✅</h3>
-                <p className="text-purple-800 text-sm">
-                  Sign EIP-7702 authorization messages for smart account delegation.
-                  Enables advanced account abstraction features with MetaMask.
-                </p>
-              </div>
-
-              <div className="card bg-gray-50 border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Message Signing 🚧</h3>
-                <p className="text-gray-800 text-sm">
-                  Sign arbitrary messages for authentication, verification, or authorization purposes.
-                  Useful for off-chain verification. <strong>Coming soon!</strong>
-                </p>
-              </div>
-
-              <div className="card bg-gray-50 border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">EIP-712 Typed Data 🚧</h3>
-                <p className="text-gray-800 text-sm">
-                  Sign structured data with EIP-712 for better security and user experience.
-                  Provides human-readable signing messages. <strong>Coming soon!</strong>
-                </p>
-              </div>
-
-              <div className="card bg-gray-50 border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Delegation 🚧</h3>
-                <p className="text-gray-800 text-sm">
-                  Delegate voting power or other permissions to another address.
-                  Common in governance and access control systems. <strong>Coming soon!</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="container mx-auto px-4 py-8 max-w-6xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Wallet Actions</h1>
+        <p className="text-gray-600">
+          Explore various wallet operations and signing methods
+        </p>
       </div>
+
+      {!currentAccount ? (
+        <div className="text-center py-12">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-8 max-w-md mx-auto">
+            <h3 className="text-lg font-semibold text-orange-900 mb-3">
+              🔐 Connect Your Wallet First
+            </h3>
+            <p className="text-orange-800 text-sm mb-4">
+              Please connect your wallet using the dropdown in the top right to start signing permits and authorizations.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Wallet Status */}
+          <div className="mb-8">
+            <WalletStatus
+              onRefreshStatus={handleRefreshStatus}
+              isRefreshing={isRefreshing}
+            />
+          </div>
+
+          {/* Available Actions - Foldable */}
+          <div className="mb-8">
+            <div className="bg-white border border-gray-200 rounded-lg">
+              <button
+                onClick={() => setIsActionsExpanded(!isActionsExpanded)}
+                className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+              >
+                <h2 className="text-xl font-semibold text-gray-900">Available Actions</h2>
+                <span className="text-gray-500">
+                  {isActionsExpanded ? '▼' : '▶'}
+                </span>
+              </button>
+
+              {isActionsExpanded && (
+                <div className="px-6 pb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {COMMON_USE_CASES.map((useCase) => (
+                      <UseCaseCard
+                        key={useCase.id}
+                        useCase={useCase}
+                        isSelected={selectedUseCase.id === useCase.id}
+                        onSelect={() => handleUseCaseSelect(useCase)}
+                        onAction={() => handleUseCaseAction(useCase)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Area */}
+          <div className="mb-8">
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-6">
+                {selectedUseCase.title}
+              </h2>
+
+              {selectedUseCase.status === 'tba' ? (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">🚧</div>
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                    Coming Soon
+                  </h3>
+                  <p className="text-gray-500">
+                    {selectedUseCase.description}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {selectedUseCase.id === 'erc20permit' && (
+                    <ERC20Permit addLog={addLog} />
+                  )}
+
+                  {selectedUseCase.id === 'eip7702' && (
+                    <EIP7702Authorization addLog={addLog} />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Operation Logs */}
+          <div className="mt-8">
+            <OperationLogs logs={logs} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

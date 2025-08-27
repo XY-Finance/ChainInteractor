@@ -215,6 +215,13 @@ export class WalletManager {
     return await this.currentWallet.sendTransaction(transaction)
   }
 
+  async signPermit(amount: bigint) {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+    return await this.currentWallet.signPermit(amount)
+  }
+
 
 
   async sign7702Authorization(authorizationData: any) {
@@ -471,5 +478,40 @@ export class WalletManager {
     if (typeof this.currentWallet.setNetworkChangeCallback === 'function') {
       this.currentWallet.setNetworkChangeCallback(callback)
     }
+  }
+
+  // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    if (!this.currentWallet || !this.currentAccount) {
+      return
+    }
+
+    if (typeof this.currentWallet.checkCurrentDelegation === 'function') {
+      await this.currentWallet.checkCurrentDelegation()
+    }
+  }
+
+  getCurrentDelegation(): string | null {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentDelegation === 'function') {
+      return this.currentWallet.getCurrentDelegation()
+    }
+
+    return null
+  }
+
+  getCurrentNonce(): number | null {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentNonce === 'function') {
+      return this.currentWallet.getCurrentNonce()
+    }
+
+    return null
   }
 }
