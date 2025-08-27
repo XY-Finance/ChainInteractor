@@ -90,6 +90,9 @@ export class WalletManager {
       if (type === 'local-key' && typeof keyIndex === 'number') {
         // Use the specific key index for environment private key wallets
         account = await (wallet as any).connectWithKey(keyIndex)
+      } else if (type === 'injected' && typeof keyIndex === 'number') {
+        // Use the specific account index for injected wallets
+        account = await (wallet as any).connect(keyIndex)
       } else {
         // Use default connection
         account = await wallet.connect()
@@ -171,6 +174,22 @@ export class WalletManager {
         address: key.address
       }))
     }
+
+    return []
+  }
+
+  // Get available accounts for injected wallet (MetaMask)
+  async getAvailableInjectedAccounts() {
+    const injectedWallet = this.wallets.get('injected')
+    if (injectedWallet && typeof (injectedWallet as any).getAvailableAccounts === 'function') {
+      const accounts = await (injectedWallet as any).getAvailableAccounts()
+      // Convert to the format expected by WalletSelector
+      return accounts.map((account: any, index: number) => ({
+        index: index,
+        address: account.address
+      }))
+    }
+
     return []
   }
 

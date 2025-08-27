@@ -12,31 +12,40 @@ export default function GlobalWalletManager() {
     getAvailableKeys,
     switchWallet,
     disconnectWallet,
-    isLoading
+    isLoading,
+    getAvailableInjectedAccounts
   } = useWalletManager()
 
   // Wallet dropdown states
   const [showWalletDropdown, setShowWalletDropdown] = useState(false)
   const [showAccountOptions, setShowAccountOptions] = useState(false)
   const [availableKeys, setAvailableKeys] = useState<Array<{index: number, address: string}>>([])
-  const [switchingAccount, setSwitchingAccount] = useState<number | null>(null)
+  const [availableInjectedAccounts, setAvailableInjectedAccounts] = useState<Array<{index: number, address: string}>>([])
+  const [switchingAccount, setSwitchingAccount] = useState<{type: string, index: number} | null>(null)
 
-  // Load available keys when component mounts or when connected
+  // Load available keys and accounts when component mounts or when connected
   useEffect(() => {
-    const loadKeys = async () => {
+    const loadAccounts = async () => {
       if (isConnected) {
         try {
-          console.log('🔍 Loading available keys...')
-          const keys = await getAvailableKeys()
-          console.log('📋 Loaded keys:', keys)
-          setAvailableKeys(keys)
+          console.log('🔍 Loading available accounts...')
+
+          // Load local keys
+          const localKeys = await getAvailableKeys()
+          console.log('📋 Loaded local keys:', localKeys)
+          setAvailableKeys(localKeys)
+
+          // Load injected accounts (MetaMask)
+          const injectedAccounts = await getAvailableInjectedAccounts()
+          console.log('📋 Loaded injected accounts:', injectedAccounts)
+          setAvailableInjectedAccounts(injectedAccounts)
         } catch (err) {
-          console.error('Failed to load available keys:', err)
+          console.error('Failed to load available accounts:', err)
         }
       }
     }
-    loadKeys()
-  }, [isConnected, getAvailableKeys])
+    loadAccounts()
+  }, [isConnected, getAvailableKeys, getAvailableInjectedAccounts])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -54,12 +63,15 @@ export default function GlobalWalletManager() {
     }
   }, [])
 
-  const handleSwitchAccount = async (keyIndex: number) => {
+  const handleSwitchAccount = async (type: string, index: number) => {
     try {
-      setSwitchingAccount(keyIndex)
-      console.log(`🔄 Switching to account ${keyIndex}...`)
-      await switchWallet('local-key', keyIndex)
-      console.log(`✅ Successfully switched to account ${keyIndex}`)
+      setSwitchingAccount({ type, index })
+      console.log(`🔄 Switching to ${type} account ${index}...`)
+
+      // Switch to the specified wallet type and account
+      await switchWallet(type as any, index)
+
+      console.log(`✅ Successfully switched to ${type} account ${index}`)
       setShowAccountOptions(false)
       setShowWalletDropdown(false)
     } catch (err) {
@@ -167,7 +179,7 @@ export default function GlobalWalletManager() {
                   </div>
 
                   {/* Account Switching */}
-                  {availableKeys.length > 1 && (
+                  {(availableKeys.length > 1 || availableInjectedAccounts.length > 1) && (
                     <div className="space-y-2">
                       <button
                         onClick={() => {
@@ -186,40 +198,81 @@ export default function GlobalWalletManager() {
                         </svg>
                       </button>
 
-                      {showAccountOptions && (
-                        <div className="bg-gray-50 rounded-md p-3 space-y-2">
-                          <p className="text-xs text-gray-600 font-medium">Available Accounts:</p>
-                          <div className="space-y-1">
-                            {availableKeys.map((key) => (
-                              <button
-                                key={key.index}
-                                onClick={() => handleSwitchAccount(key.index)}
-                                disabled={isLoading || switchingAccount === key.index}
-                                className="w-full text-left text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed group relative"
-                                title={key.address}
-                              >
-                                <div className="overflow-hidden text-ellipsis whitespace-nowrap">
-                                  {switchingAccount === key.index ? (
-                                    <>⏳ Switching to Key #{key.index}...</>
-                                  ) : (
-                                    <>
-                                      🔑 Key #{key.index} ({key.address.slice(0, 6)}...{key.address.slice(-4)})
-                                      {currentAccount?.keyIndex === key.index && (
-                                        <span className="text-green-600 ml-1">✓</span>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                                {/* Tooltip for full address */}
-                                <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                                  {key.address}
-                                  <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-0 h-0 border-l-0 border-r-4 border-t-2 border-b-2 border-transparent border-r-gray-900"></div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                                             {showAccountOptions && (
+                         <div className="bg-gray-50 rounded-md p-3 space-y-4">
+                           {/* Local Keys Section */}
+                           {availableKeys.length > 1 && (
+                             <div className="space-y-2">
+                               <p className="text-xs text-gray-600 font-medium">Available Private Keys:</p>
+                               <div className="space-y-1">
+                                 {availableKeys.map((key) => (
+                                   <button
+                                     key={`local-${key.index}`}
+                                     onClick={() => handleSwitchAccount('local-key', key.index)}
+                                     disabled={isLoading || (switchingAccount?.type === 'local-key' && switchingAccount?.index === key.index)}
+                                     className="w-full text-left text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed group relative"
+                                     title={key.address}
+                                   >
+                                     <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                                       {switchingAccount?.type === 'local-key' && switchingAccount?.index === key.index ? (
+                                         <>⏳ Switching to Key #{key.index}...</>
+                                       ) : (
+                                         <>
+                                           🔑 Key #{key.index} ({key.address.slice(0, 6)}...{key.address.slice(-4)})
+                                           {currentAccount?.type === 'local-key' && currentAccount?.keyIndex === key.index && (
+                                             <span className="text-green-600 ml-1">✓</span>
+                                           )}
+                                         </>
+                                       )}
+                                     </div>
+                                     {/* Tooltip for full address */}
+                                     <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                       {key.address}
+                                       <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-0 h-0 border-l-0 border-r-4 border-t-2 border-b-2 border-transparent border-r-gray-900"></div>
+                                     </div>
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+
+                           {/* Injected Accounts Section */}
+                           {availableInjectedAccounts.length > 1 && (
+                             <div className="space-y-2">
+                               <p className="text-xs text-gray-600 font-medium">Available MetaMask Accounts:</p>
+                               <div className="space-y-1">
+                                 {availableInjectedAccounts.map((account) => (
+                                   <button
+                                     key={`injected-${account.index}`}
+                                     onClick={() => handleSwitchAccount('injected', account.index)}
+                                     disabled={isLoading || (switchingAccount?.type === 'injected' && switchingAccount?.index === account.index)}
+                                     className="w-full text-left text-xs text-gray-700 hover:bg-gray-100 px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed group relative"
+                                     title={account.address}
+                                   >
+                                     <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+                                       {switchingAccount?.type === 'injected' && switchingAccount?.index === account.index ? (
+                                         <>⏳ Switching to Account #{account.index}...</>
+                                       ) : (
+                                         <>
+                                           👤 Account #{account.index} ({account.address.slice(0, 6)}...{account.address.slice(-4)})
+                                           {currentAccount?.type === 'injected' && currentAccount?.address === account.address && (
+                                             <span className="text-green-600 ml-1">✓</span>
+                                           )}
+                                         </>
+                                       )}
+                                     </div>
+                                     {/* Tooltip for full address */}
+                                     <div className="absolute left-full ml-2 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                       {account.address}
+                                       <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1 w-0 h-0 border-l-0 border-r-4 border-t-2 border-b-2 border-transparent border-r-gray-900"></div>
+                                     </div>
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                       )}
                     </div>
                   )}
 

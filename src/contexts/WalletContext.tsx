@@ -31,6 +31,7 @@ interface WalletContextType {
   createSmartAccount: () => Promise<any>
   sendUserOperation: (userOp: any) => Promise<any>
   getAvailableKeys: () => Promise<any>
+  getAvailableInjectedAccounts: () => Promise<any>
   getPublicClient: () => any
   getWalletClient: () => any
   clearError: () => void
@@ -296,6 +297,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return await walletManager.getAvailableKeys()
   }, [walletManager])
 
+  // Get available injected accounts
+  const getAvailableInjectedAccounts = useCallback(async () => {
+    return await walletManager.getAvailableInjectedAccounts()
+  }, [walletManager])
+
   // Get clients
   const getPublicClient = useCallback(() => {
     return walletManager.getPublicClient()
@@ -337,6 +343,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     createSmartAccount,
     sendUserOperation,
     getAvailableKeys,
+    getAvailableInjectedAccounts,
     getPublicClient,
     getWalletClient,
     clearError,

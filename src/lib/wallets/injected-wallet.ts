@@ -32,7 +32,7 @@ export class InjectedWallet extends BaseWallet {
     return !!(window as any).ethereum
   }
 
-  async connect(): Promise<WalletAccount> {
+  async connect(accountIndex?: number): Promise<WalletAccount> {
     if (!this.ethereum) {
       this.ethereum = (window as any).ethereum
     }
@@ -51,7 +51,13 @@ export class InjectedWallet extends BaseWallet {
         throw new Error('No accounts found')
       }
 
-      const address = accounts[0] as Address
+      // If accountIndex is provided, use that specific account
+      const targetIndex = accountIndex !== undefined ? accountIndex : 0
+      if (targetIndex >= accounts.length) {
+        throw new Error(`Account index ${targetIndex} is out of range. Available accounts: ${accounts.length}`)
+      }
+
+      const address = accounts[targetIndex] as Address
       this.account = this.createAccount(address, 'injected')
 
       // Get current chain ID
@@ -117,6 +123,30 @@ export class InjectedWallet extends BaseWallet {
 
   async getAccount(): Promise<WalletAccount | null> {
     return this.account
+  }
+
+  // Get all available accounts from MetaMask
+  async getAvailableAccounts(): Promise<WalletAccount[]> {
+    if (!this.ethereum) {
+      throw new Error('No injected wallet available')
+    }
+
+    try {
+      // Request all accounts (this will prompt user if not already connected)
+      const accounts = await this.ethereum.request({
+        method: 'eth_requestAccounts'
+      })
+
+      if (accounts.length === 0) {
+        return []
+      }
+
+      // Convert addresses to WalletAccount objects
+      return accounts.map((address: string) => this.createAccount(address as Address, 'injected'))
+    } catch (error) {
+      console.error('Failed to get available accounts:', error)
+      return []
+    }
   }
 
   getCapabilities(): WalletCapabilities {
