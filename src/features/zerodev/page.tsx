@@ -42,7 +42,7 @@ export default function Home() {
           </p>
           <div className="mt-6">
             <a
-              href="/eip7702"
+              href="/wallet-actions"
               className="inline-flex items-center px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
             >
               🚀 Try MetaMask EIP-7702 Authorization

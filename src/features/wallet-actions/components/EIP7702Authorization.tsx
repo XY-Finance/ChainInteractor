@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { addresses } from '../../../config/addresses'
 import { sepolia } from 'viem/chains'
@@ -11,7 +11,7 @@ interface EIP7702AuthorizationProps {
   addLog: (message: string) => void
 }
 
-export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationProps) {
+const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }: EIP7702AuthorizationProps) {
   const {
     address,
     publicClient,
@@ -69,24 +69,30 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
     }
   ]
 
-    const getFilteredDelegatees = () => {
-    if (!address) return DELEGATEE_CONTRACTS
+    // Memoized filtered delegatees to prevent unnecessary recalculations
+    const filteredDelegatees = useMemo(() => {
+      if (!address) return DELEGATEE_CONTRACTS
 
-    try {
-      // Get current delegation status
-      const currentDelegationStatus = currentDelegation || addresses.common.zero
+      try {
+        // Get current delegation status
+        const currentDelegationStatus = currentDelegation || addresses.common.zero
 
-      // Filter delegatees based on current delegation
-      const availableDelegatees = filterCurrentDelegatee(currentDelegationStatus, DELEGATEE_CONTRACTS)
+        // Filter delegatees based on current delegation
+        const availableDelegatees = filterCurrentDelegatee(currentDelegationStatus, DELEGATEE_CONTRACTS)
 
-      return availableDelegatees
-    } catch (error) {
-      console.error('Error filtering delegatees:', error)
-      return DELEGATEE_CONTRACTS
-    }
-  }
+        return availableDelegatees
+      } catch (error) {
+        console.error('Error filtering delegatees:', error)
+        return DELEGATEE_CONTRACTS
+      }
+        }, [address, currentDelegation, filterCurrentDelegatee])
 
-  const createSmartAccountAction = async () => {
+    // Memoized delegatee options with reasons to prevent unnecessary recalculations
+    const delegateeOptionsWithReasons = useMemo(() => {
+      return getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS)
+    }, [currentDelegation, getDelegateeOptionsWithReasons])
+
+    const createSmartAccountAction = async () => {
     if (!address) {
       addLog('❌ Please connect your wallet first')
       return
@@ -271,7 +277,7 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS).map((contract) => (
+          {delegateeOptionsWithReasons.map((contract) => (
             <div
               key={contract.address}
               className={`p-4 border rounded-lg transition-colors ${
@@ -497,4 +503,6 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
       </div>
     </div>
   )
-}
+})
+
+export default EIP7702Authorization

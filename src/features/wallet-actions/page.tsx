@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 import WalletStatus from './components/WalletStatus'
 import UseCaseCard from './components/UseCaseCard'
@@ -48,7 +48,7 @@ const COMMON_USE_CASES = [
   }
 ]
 
-export default function WalletActionsPage() {
+const WalletActionsPage = React.memo(function WalletActionsPage() {
   const {
     currentAccount,
     currentDelegation,
@@ -215,4 +215,6 @@ export default function WalletActionsPage() {
       )}
     </div>
   )
-}
+})
+
+export default WalletActionsPage
