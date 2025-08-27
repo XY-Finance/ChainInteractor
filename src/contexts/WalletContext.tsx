@@ -30,7 +30,7 @@ interface WalletContextType {
   submit7702Authorization: (signedAuthorization: any) => Promise<any>
   filterCurrentDelegatee: (currentDelegations: string, options: any[]) => any[]
   isDelegateeSupported: (delegateeAddress: string) => boolean
-  getDelegateeOptions: (currentDelegations: string, options: any[]) => any[]
+
   getDelegateeSupportInfo: (delegateeAddress: string) => { isSupported: boolean; reason?: string }
   getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => Array<any & { isSupported: boolean; reason?: string }>
   checkCurrentDelegation: () => Promise<void>
@@ -421,7 +421,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     checkCurrentDelegation,
     filterCurrentDelegatee: (currentDelegations: string, options: any[]) => walletManager.filterCurrentDelegatee(currentDelegations, options),
     isDelegateeSupported: (delegateeAddress: string) => walletManager.isDelegateeSupported(delegateeAddress),
-    getDelegateeOptions: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptions(currentDelegations, options),
+
     getDelegateeSupportInfo: (delegateeAddress: string) => walletManager.getDelegateeSupportInfo(delegateeAddress),
     getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptionsWithReasons(currentDelegations, options),
 

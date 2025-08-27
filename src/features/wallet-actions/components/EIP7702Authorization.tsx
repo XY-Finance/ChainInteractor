@@ -18,6 +18,7 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
     sign7702Authorization,
     submit7702Authorization,
     filterCurrentDelegatee,
+    getDelegateeOptionsWithReasons,
     createSmartAccount,
     sendUserOperation,
     currentDelegation,
@@ -246,9 +247,11 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
                 addLog(`🔄 Refreshing delegation status...`)
                 await checkCurrentDelegation()
                 addLog(`📋 Current delegation: ${currentDelegation || 'Not delegated'}`)
-                addLog(`📋 Available delegatees: ${getFilteredDelegatees().length}`)
-                getFilteredDelegatees().forEach(delegatee => {
-                  addLog(`   - ${delegatee.name}: ${delegatee.address}`)
+                const options = getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS)
+                console.log('getDelegateeOptionsWithReasons result:', options)
+                addLog(`📋 Available delegatees: ${options.length}`)
+                options.forEach(delegatee => {
+                  addLog(`   - ${delegatee.name}: ${delegatee.address} (supported: ${delegatee.isSupported})`)
                 })
               } catch (error) {
                 addLog(`❌ Failed to refresh delegation: ${error}`)
@@ -263,15 +266,17 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {getFilteredDelegatees().map((contract) => (
+          {getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS).map((contract) => (
             <div
               key={contract.address}
-              className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                selectedContract?.address === contract.address
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 hover:border-gray-300'
+              className={`p-4 border rounded-lg transition-colors ${
+                !contract.isSupported
+                  ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
+                  : selectedContract?.address === contract.address
+                  ? 'border-orange-500 bg-orange-50 cursor-pointer'
+                  : 'border-gray-200 hover:border-gray-300 cursor-pointer'
               }`}
-              onClick={() => setSelectedContract(contract)}
+              onClick={() => contract.isSupported && setSelectedContract(contract)}
             >
               <div className="text-center">
                 <h4 className="font-medium text-primary">{contract.name}</h4>
@@ -279,6 +284,11 @@ export default function EIP7702Authorization({ addLog }: EIP7702AuthorizationPro
                 <p className="text-xs text-muted font-mono mt-1">
                   {contract.address.slice(0, 6)}...{contract.address.slice(-4)}
                 </p>
+                {!contract.isSupported && contract.reason && (
+                  <p className="text-xs text-red-600 mt-2">
+                    ⚠️ {contract.reason}
+                  </p>
+                )}
               </div>
             </div>
           ))}

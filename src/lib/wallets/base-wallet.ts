@@ -140,14 +140,7 @@ export abstract class BaseWallet implements WalletInterface {
     return true
   }
 
-  // Get delegatee options with support information
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
-    return availableOptions.map(contract => ({
-      ...contract,
-      isSupported: this.isDelegateeSupported(contract.address)
-    }))
-  }
+
 
   // Get detailed support information for a delegatee
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {

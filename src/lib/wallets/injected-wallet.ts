@@ -185,15 +185,6 @@ export class InjectedWallet extends BaseWallet {
     return delegateeAddress.toLowerCase() === addresses.delegatee.metamask.toLowerCase()
   }
 
-  // Override getDelegateeOptions to provide MetaMask-specific behavior
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
-    return availableOptions.map(contract => ({
-      ...contract,
-      isSupported: this.isDelegateeSupported(contract.address)
-    }))
-  }
-
   // Override getDelegateeSupportInfo to provide MetaMask-specific reasons
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
     const isSupported = this.isDelegateeSupported(delegateeAddress)
@@ -210,7 +201,9 @@ export class InjectedWallet extends BaseWallet {
 
   // Override getDelegateeOptionsWithReasons for MetaMask
   getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
-    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
+    const availableOptions = options.filter(contract =>
+      contract.address.toLowerCase() !== currentDelegations.toLowerCase()
+    )
     return availableOptions.map(contract => ({
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)

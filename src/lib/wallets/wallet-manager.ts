@@ -288,25 +288,11 @@ export class WalletManager {
     return this.currentWallet.isDelegateeSupported(delegateeAddress)
   }
 
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    if (!this.currentWallet) {
-      throw new Error('No wallet connected')
-    }
 
-    if (typeof this.currentWallet.getDelegateeOptions !== 'function') {
-      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee options`)
-    }
-
-    return this.currentWallet.getDelegateeOptions(currentDelegations, options)
-  }
 
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
     if (!this.currentWallet) {
       return { isSupported: false, reason: 'No wallet connected' }
-    }
-
-    if (typeof this.currentWallet.getDelegateeSupportInfo !== 'function') {
-      return { isSupported: true } // Default to supported if method doesn't exist
     }
 
     return this.currentWallet.getDelegateeSupportInfo(delegateeAddress)

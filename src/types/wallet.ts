@@ -56,7 +56,7 @@ export interface WalletInterface {
   submit7702Authorization(signedAuthorization: any): Promise<Hex>
   filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[]
   isDelegateeSupported(delegateeAddress: string): boolean
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }>
+
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string }
   getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
 
