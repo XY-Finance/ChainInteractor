@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { WalletManager } from '../lib/wallets/wallet-manager'
 import { type WalletType, type WalletAccount, type WalletConfig } from '../types/wallet'
 
@@ -108,7 +108,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     walletManager.setStateChangeCallback(() => {
       updateState()
     })
-  }, [walletManager, mounted])
+  }, [walletManager, mounted, updateState])
 
   // Connect to wallet
   const connectWallet = useCallback(async (type: WalletType, keyIndex?: number) => {
@@ -259,8 +259,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
-
-
   const submit7702Authorization = useCallback(async (signedAuthorization: any) => {
     if (!isConnected) {
       throw new Error('No wallet connected')
@@ -318,8 +316,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
-  // Get wallet capabilities
-  const capabilities = walletManager.getCapabilities()
+  // Get wallet capabilities - memoized to prevent recreation
+  const capabilities = useMemo(() => walletManager.getCapabilities(), [walletManager])
 
   // Get available keys
   const getAvailableKeys = useCallback(async () => {
@@ -370,6 +368,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setError(null)
   }, [])
 
+  // Memoized delegatee functions to prevent recreation
+  const filterCurrentDelegatee = useCallback((currentDelegations: string, options: any[]) => {
+    return walletManager.filterCurrentDelegatee(currentDelegations, options)
+  }, [walletManager])
+
+  const isDelegateeSupported = useCallback((delegateeAddress: string) => {
+    return walletManager.isDelegateeSupported(delegateeAddress)
+  }, [walletManager])
+
+  const getDelegateeSupportInfo = useCallback((delegateeAddress: string) => {
+    return walletManager.getDelegateeSupportInfo(delegateeAddress)
+  }, [walletManager])
+
+  const getDelegateeOptionsWithReasons = useCallback((currentDelegations: string, options: any[]) => {
+    return walletManager.getDelegateeOptionsWithReasons(currentDelegations, options)
+  }, [walletManager])
+
+  // Memoized network functions
+  const getCurrentChainId = useCallback(() => {
+    return walletManager.getCurrentChainId()
+  }, [walletManager])
+
+  const getCurrentNetwork = useCallback(() => {
+    return walletManager.getCurrentNetwork()
+  }, [walletManager])
+
+  const switchNetwork = useCallback((chainId: number) => {
+    return walletManager.switchNetwork(chainId)
+  }, [walletManager])
+
+  const addNetwork = useCallback((chainId: number) => {
+    return walletManager.addNetwork(chainId)
+  }, [walletManager])
+
+  const getSupportedNetworks = useCallback(() => {
+    return walletManager.getSupportedNetworks()
+  }, [walletManager])
+
+  const getDefaultNetwork = useCallback(() => {
+    return walletManager.getDefaultNetwork()
+  }, [walletManager])
+
+  const setNetworkChangeCallback = useCallback((callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => {
+    return walletManager.setNetworkChangeCallback(callback)
+  }, [walletManager])
+
   // Initial state update
   useEffect(() => {
     if (!mounted) return
@@ -386,7 +430,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, currentAccount, checkCurrentDelegation])
 
-  const value: WalletContextType = {
+  // Memoized derived values to prevent unnecessary recalculations
+  const address = useMemo(() => currentAccount?.address || null, [currentAccount?.address])
+  const publicClient = useMemo(() => isConnected ? getPublicClient() : null, [isConnected, getPublicClient])
+  const walletClient = useMemo(() => isConnected ? getWalletClient() : null, [isConnected, getWalletClient])
+
+  // Memoized context value to prevent unnecessary re-renders
+  const value = useMemo<WalletContextType>(() => ({
     // State
     isConnected,
     currentAccount,
@@ -396,9 +446,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     capabilities,
     currentDelegation,
     currentNonce,
-    address: currentAccount?.address || null,
-    publicClient: isConnected ? getPublicClient() : null,
-    walletClient: isConnected ? getWalletClient() : null,
+    address,
+    publicClient,
+    walletClient,
 
     // Actions
     connectWallet,
@@ -419,26 +469,74 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getWalletClient,
     clearError,
     checkCurrentDelegation,
-    filterCurrentDelegatee: (currentDelegations: string, options: any[]) => walletManager.filterCurrentDelegatee(currentDelegations, options),
-    isDelegateeSupported: (delegateeAddress: string) => walletManager.isDelegateeSupported(delegateeAddress),
-
-    getDelegateeSupportInfo: (delegateeAddress: string) => walletManager.getDelegateeSupportInfo(delegateeAddress),
-    getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptionsWithReasons(currentDelegations, options),
+    filterCurrentDelegatee,
+    isDelegateeSupported,
+    getDelegateeSupportInfo,
+    getDelegateeOptionsWithReasons,
 
     // Network detection
-    getCurrentChainId: () => walletManager.getCurrentChainId(),
-    getCurrentNetwork: () => walletManager.getCurrentNetwork(),
+    getCurrentChainId,
+    getCurrentNetwork,
 
     // Network switching
-    switchNetwork: (chainId: number) => walletManager.switchNetwork(chainId),
-    addNetwork: (chainId: number) => walletManager.addNetwork(chainId),
-    getSupportedNetworks: () => walletManager.getSupportedNetworks(),
-    getDefaultNetwork: () => walletManager.getDefaultNetwork(),
-    setNetworkChangeCallback: (callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => walletManager.setNetworkChangeCallback(callback),
+    switchNetwork,
+    addNetwork,
+    getSupportedNetworks,
+    getDefaultNetwork,
+    setNetworkChangeCallback,
 
     // Utility
     walletManager
-  }
+  }), [
+    // State dependencies
+    isConnected,
+    currentAccount,
+    isLoading,
+    error,
+    availableWallets,
+    capabilities,
+    currentDelegation,
+    currentNonce,
+    address,
+    publicClient,
+    walletClient,
+
+    // Action dependencies
+    connectWallet,
+    disconnectWallet,
+    switchWallet,
+    signMessage,
+    signTypedData,
+    signPermit,
+    sendTransaction,
+    sign7702Authorization,
+    submit7702Authorization,
+    createSmartAccount,
+    sendUserOperation,
+    getAvailableKeys,
+    areLocalKeysAvailable,
+    getAvailableInjectedAccounts,
+    getPublicClient,
+    getWalletClient,
+    clearError,
+    checkCurrentDelegation,
+    filterCurrentDelegatee,
+    isDelegateeSupported,
+    getDelegateeSupportInfo,
+    getDelegateeOptionsWithReasons,
+
+    // Network dependencies
+    getCurrentChainId,
+    getCurrentNetwork,
+    switchNetwork,
+    addNetwork,
+    getSupportedNetworks,
+    getDefaultNetwork,
+    setNetworkChangeCallback,
+
+    // Utility dependencies
+    walletManager
+  ])
 
   if (!mounted) {
     return <div>Loading...</div>
