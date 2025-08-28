@@ -77,6 +77,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [currentDelegation, setCurrentDelegation] = useState<string | null>(null)
   const [currentNonce, setCurrentNonce] = useState<number | null>(null)
   const [isDelegationChecked, setIsDelegationChecked] = useState(false)
+  const [isAutoConnecting, setIsAutoConnecting] = useState(false)
 
   // Prevent hydration issues
   useEffect(() => {
@@ -105,13 +106,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!mounted) return
 
     const performAutoConnect = async () => {
+      setIsAutoConnecting(true)
       try {
         const account = await walletManager.autoConnectToKey0()
         if (account) {
-          await updateState()
+          // Update state directly to avoid dependency issues
+          const currentAccount = walletManager.getCurrentAccount()
+          const connected = walletManager.isConnected()
+          setCurrentAccount(currentAccount)
+          setIsConnected(connected)
         }
       } catch (error) {
         console.error('🔄 WalletContext: Auto-connect failed:', error)
+      } finally {
+        setIsAutoConnecting(false)
       }
     }
 
@@ -639,25 +647,42 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   ])
 
   if (!mounted) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Initializing wallet system...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Auto-connect loading state
+  if (isAutoConnecting) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Auto-connecting to wallet...</p>
+        </div>
+      </div>
+    )
   }
 
   // Block rendering until delegation is checked when wallet is connected
   if (isConnected && currentAccount && !isDelegationChecked) {
-    return <div>Checking delegation status...</div>
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking delegation status...</p>
+        </div>
+      </div>
+    )
   }
 
-  // Additional check: if delegation is checked but still null, block render
-  if (isConnected && currentAccount && isDelegationChecked && !currentDelegation) {
-    return <div>Delegation check completed but result is null...</div>
-  }
-
-
-
-  // CRITICAL ERROR: currentDelegation should NEVER be null when wallet is connected AND delegation has been checked
-  if (isConnected && currentAccount && isDelegationChecked && !currentDelegation) {
-    throw new Error(`🚨 CRITICAL ERROR: currentDelegation is null while wallet is connected! Account: ${currentAccount.address}, Type: ${currentAccount.type}`)
-  }
+  // Remove the blocking logic for null delegation - this is a valid state
+  // A wallet can be connected but not delegated, which is perfectly fine
 
   return (
     <WalletContext.Provider value={value}>

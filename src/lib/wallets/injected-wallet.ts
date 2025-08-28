@@ -417,12 +417,6 @@ export class InjectedWallet extends BaseWallet {
       this.currentNonce = parseInt(nonce, 16);
       console.log(`📊 Current nonce: ${this.currentNonce}`);
       console.log(`📋 Final delegation status: ${this.currentDelegation || 'Not delegated'}`);
-
-      // Force a state update by calling the callback
-      if (this.onAccountChange) {
-        console.log('🔄 Triggering state update...');
-        this.onAccountChange(this.account);
-      }
     } catch (error) {
       console.error('❌ Failed to check current delegation:', error);
       // Set to not delegated on error

@@ -152,14 +152,8 @@ export class WalletManager {
 
       // Set up account change callback for injected wallets
       if (type === 'injected' && (wallet as any).setAccountChangeCallback) {
-        ;(wallet as any).setAccountChangeCallback((newAccount: WalletAccount | null) => {
-          this.currentAccount = newAccount
-          if (!newAccount) {
-            this.currentWallet = null
-          }
-
-          // Notify React context of state change
-          this.notifyStateChange()
+        ;(wallet as any).setAccountChangeCallback(async (newAccount: WalletAccount | null) => {
+          await this.switchAccount(newAccount)
         })
       }
 
@@ -171,6 +165,19 @@ export class WalletManager {
       console.error(`❌ Failed to connect to ${type} wallet:`, error)
       throw error
     }
+  }
+
+  // Switch to a different account
+  async switchAccount(newAccount: WalletAccount | null): Promise<void> {
+    if (newAccount) {
+      this.currentAccount = newAccount
+    } else {
+      this.currentWallet = null
+      this.currentAccount = null
+    }
+
+    // Notify React context of state change
+    this.notifyStateChange()
   }
 
   // Disconnect current wallet
