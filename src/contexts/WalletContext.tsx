@@ -22,6 +22,7 @@ interface WalletContextType {
   connectWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
   disconnectWallet: () => Promise<void>
   switchWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
+  autoConnectToKey0: () => Promise<WalletAccount | null>
   signMessage: (message: string) => Promise<any>
   signTypedData: (domain: any, types: any, message: any) => Promise<any>
   sendTransaction: (transaction: any) => Promise<any>
@@ -40,6 +41,10 @@ interface WalletContextType {
   getAvailableKeys: () => Promise<any>
   areLocalKeysAvailable: () => Promise<boolean>
   getAvailableInjectedAccounts: () => Promise<any>
+  getAllAvailableAccounts: () => Promise<{
+    localKeys: Array<{index: number, address: string}>,
+    injectedAccounts: Array<{index: number, address: string}>
+  }>
   getPublicClient: () => any
   getWalletClient: () => any
   clearError: () => void
@@ -94,6 +99,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     loadWallets()
   }, [loadWallets])
 
+  // Auto-connect on first load
+  useEffect(() => {
+    if (!mounted) return
+
+    const performAutoConnect = async () => {
+      try {
+        console.log('🔄 WalletContext: Attempting auto-connect...')
+        const account = await walletManager.autoConnectToKey0()
+        if (account) {
+          console.log('🔄 WalletContext: Auto-connect successful:', account.address)
+          updateState()
+        } else {
+          console.log('🔄 WalletContext: Auto-connect not available')
+        }
+      } catch (error) {
+        console.error('🔄 WalletContext: Auto-connect failed:', error)
+      }
+    }
+
+    performAutoConnect()
+  }, [mounted, walletManager])
+
   // Update state from wallet manager
   const updateState = useCallback(() => {
     const account = walletManager.getCurrentAccount()
@@ -126,6 +153,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return account
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect wallet'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [walletManager, updateState])
+
+  // Auto-connect to KEY0
+  const autoConnectToKey0 = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const account = await walletManager.autoConnectToKey0()
+      updateState()
+      return account
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to auto-connect'
       setError(errorMessage)
       throw err
     } finally {
@@ -339,6 +384,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return await walletManager.getAvailableInjectedAccounts()
   }, [walletManager])
 
+  // Get all available accounts
+  const getAllAvailableAccounts = useCallback(async () => {
+    return await walletManager.getAllAvailableAccounts()
+  }, [walletManager])
+
   // Get clients
   const getPublicClient = useCallback(() => {
     return walletManager.getPublicClient()
@@ -464,6 +514,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     connectWallet,
     disconnectWallet,
     switchWallet,
+    autoConnectToKey0,
     signMessage,
     signTypedData,
     signPermit,
@@ -475,6 +526,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getAvailableKeys,
     areLocalKeysAvailable,
     getAvailableInjectedAccounts,
+    getAllAvailableAccounts,
     getPublicClient,
     getWalletClient,
     clearError,
@@ -515,6 +567,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     connectWallet,
     disconnectWallet,
     switchWallet,
+    autoConnectToKey0,
     signMessage,
     signTypedData,
     signPermit,
@@ -526,6 +579,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     getAvailableKeys,
     areLocalKeysAvailable,
     getAvailableInjectedAccounts,
+    getAllAvailableAccounts,
     getPublicClient,
     getWalletClient,
     clearError,

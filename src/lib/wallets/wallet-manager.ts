@@ -9,10 +9,12 @@ export class WalletManager {
   private currentWallet: WalletInterface | null = null
   private currentAccount: WalletAccount | null = null
   private stateChangeCallback?: () => void
+  private isInitialized = false
+  private initializationPromise: Promise<void> | null = null
 
   constructor() {
     // Initialize wallets asynchronously
-    this.initializeWallets().catch(console.error)
+    this.initializationPromise = this.initializeWallets()
   }
 
   // Set callback for state changes
@@ -27,24 +29,47 @@ export class WalletManager {
     }
   }
 
+  // Wait for initialization to complete
+  async waitForInitialization(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise
+    }
+  }
+
   private async initializeWallets(): Promise<void> {
+    console.log('🔧 WalletManager: Initializing wallets...')
+
     // Initialize local key wallet
     const isLocalWalletAvailable = await LocalKeyWallet.isAvailable()
+    console.log('🔧 WalletManager: Local wallet available:', isLocalWalletAvailable)
     if (isLocalWalletAvailable) {
       const localWallet = new LocalKeyWallet()
       this.wallets.set('local-key', localWallet)
+      console.log('🔧 WalletManager: Local wallet initialized')
+
+      // Wait for local keys to be loaded
+      console.log('🔧 WalletManager: Waiting for local keys to load...')
+      await localWallet.areKeysLoaded()
+      console.log('🔧 WalletManager: Local keys loaded')
     }
 
     // Initialize injected wallet (MetaMask)
     const isInjectedWalletAvailable = await InjectedWallet.isAvailable()
+    console.log('🔧 WalletManager: Injected wallet available:', isInjectedWalletAvailable)
     if (isInjectedWalletAvailable) {
       const injectedWallet = new InjectedWallet()
       this.wallets.set('injected', injectedWallet)
+      console.log('🔧 WalletManager: Injected wallet initialized')
     }
+
+    this.isInitialized = true
+    console.log('🔧 WalletManager: Wallet initialization complete. Wallets:', Array.from(this.wallets.keys()))
   }
 
   // Get available wallet configurations
   async getAvailableWallets(): Promise<WalletConfig[]> {
+    await this.waitForInitialization()
+
     const configs: WalletConfig[] = []
 
     // Local key wallet
@@ -76,8 +101,50 @@ export class WalletManager {
     return configs
   }
 
-    // Connect to a specific wallet type
+  // Auto-connect to KEY0 on first login
+  async autoConnectToKey0(): Promise<WalletAccount | null> {
+    await this.waitForInitialization()
+
+    // Check if we're already connected
+    if (this.isConnected()) {
+      return this.currentAccount
+    }
+
+    // Try to connect to local-key KEY0 first
+    const localWallet = this.wallets.get('local-key')
+    if (localWallet) {
+      try {
+        console.log('🔧 WalletManager: Attempting auto-connect to KEY0...')
+        const account = await this.connectWallet('local-key', 0)
+        console.log('🔧 WalletManager: Auto-connected to KEY0:', account.address)
+        return account
+      } catch (error) {
+        console.log('🔧 WalletManager: Failed to auto-connect to KEY0:', error)
+        // Continue to try other wallets if local-key fails
+      }
+    }
+
+    // If local-key fails, try injected wallet
+    const injectedWallet = this.wallets.get('injected')
+    if (injectedWallet) {
+      try {
+        console.log('🔧 WalletManager: Attempting auto-connect to injected wallet...')
+        const account = await this.connectWallet('injected')
+        console.log('🔧 WalletManager: Auto-connected to injected wallet:', account.address)
+        return account
+      } catch (error) {
+        console.log('🔧 WalletManager: Failed to auto-connect to injected wallet:', error)
+      }
+    }
+
+    console.log('🔧 WalletManager: No auto-connect successful')
+    return null
+  }
+
+  // Connect to a specific wallet type
   async connectWallet(type: WalletType, keyIndex?: number): Promise<WalletAccount> {
+    await this.waitForInitialization()
+
     const wallet = this.wallets.get(type)
 
     if (!wallet) {
@@ -165,8 +232,10 @@ export class WalletManager {
     return capabilities[operation] || false
   }
 
-    // Get available keys for local key wallet
+  // Get available keys for local key wallet - now returns a promise
   async getAvailableKeys() {
+    await this.waitForInitialization()
+
     const localWallet = this.wallets.get('local-key')
     if (localWallet && typeof (localWallet as any).getAvailableKeys === 'function') {
       const keys = await (localWallet as any).getAvailableKeys()
@@ -182,6 +251,8 @@ export class WalletManager {
 
   // Check if local keys are loaded and available
   async areLocalKeysAvailable(): Promise<boolean> {
+    await this.waitForInitialization()
+
     const localWallet = this.wallets.get('local-key')
     if (localWallet && typeof (localWallet as any).areKeysLoaded === 'function') {
       return await (localWallet as any).areKeysLoaded()
@@ -189,24 +260,55 @@ export class WalletManager {
     return false
   }
 
-  // Get available accounts for injected wallet (MetaMask)
+  // Get available accounts for injected wallet (MetaMask) - now returns a promise
   async getAvailableInjectedAccounts() {
+    await this.waitForInitialization()
+
+    console.log('🔍 WalletManager: Getting available injected accounts...')
+
     const injectedWallet = this.wallets.get('injected')
+    console.log('🔍 WalletManager: Injected wallet found:', !!injectedWallet)
+
     if (injectedWallet && typeof (injectedWallet as any).getAvailableAccounts === 'function') {
       try {
+        console.log('🔍 WalletManager: Calling getAvailableAccounts on injected wallet...')
         const accounts = await (injectedWallet as any).getAvailableAccounts()
+        console.log('🔍 WalletManager: Raw accounts from injected wallet:', accounts)
+
         // Convert to the format expected by WalletSelector
-        return accounts.map((account: any, index: number) => ({
+        const formattedAccounts = accounts.map((account: any, index: number) => ({
           index: index,
           address: account.address
         }))
+
+        console.log('🔍 WalletManager: Formatted accounts:', formattedAccounts)
+        return formattedAccounts
       } catch (error) {
-        console.log('No injected wallet available, returning empty array')
+        console.error('❌ WalletManager: Error getting injected accounts:', error)
         return []
       }
     }
 
+    console.log('❌ WalletManager: No injected wallet or getAvailableAccounts method not found')
     return []
+  }
+
+  // Get all available accounts from all wallet types
+  async getAllAvailableAccounts(): Promise<{
+    localKeys: Array<{index: number, address: string}>,
+    injectedAccounts: Array<{index: number, address: string}>
+  }> {
+    await this.waitForInitialization()
+
+    const [localKeys, injectedAccounts] = await Promise.all([
+      this.getAvailableKeys(),
+      this.getAvailableInjectedAccounts()
+    ])
+
+    return {
+      localKeys,
+      injectedAccounts
+    }
   }
 
   // Convenience methods that delegate to current wallet

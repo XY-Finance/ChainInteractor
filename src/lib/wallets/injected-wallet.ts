@@ -150,19 +150,34 @@ export class InjectedWallet extends BaseWallet {
     }
 
     try {
-      // Request all accounts (this will prompt user if not already connected)
-      const accounts = await this.ethereum.request({
-        method: 'eth_requestAccounts'
+      console.log('🔧 InjectedWallet: Getting available accounts...')
+
+      // First try to get accounts without prompting (eth_accounts)
+      let accounts = await this.ethereum.request({
+        method: 'eth_accounts'
       })
+
+      // If no accounts found, try requesting accounts (eth_requestAccounts)
+      if (accounts.length === 0) {
+        console.log('🔧 InjectedWallet: No accounts found with eth_accounts, trying eth_requestAccounts...')
+        accounts = await this.ethereum.request({
+          method: 'eth_requestAccounts'
+        })
+      }
+
+      console.log(`🔧 InjectedWallet: Found ${accounts.length} accounts from MetaMask:`, accounts)
 
       if (accounts.length === 0) {
         return []
       }
 
       // Convert addresses to WalletAccount objects
-      return accounts.map((address: string) => this.createAccount(address as Address, 'injected'))
+      const walletAccounts = accounts.map((address: string) => this.createAccount(address as Address, 'injected'))
+      console.log('🔧 InjectedWallet: Converted to wallet accounts:', walletAccounts)
+
+      return walletAccounts
     } catch (error) {
-      console.error('Failed to get available accounts:', error)
+      console.error('❌ InjectedWallet: Failed to get available accounts:', error)
       return []
     }
   }

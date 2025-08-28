@@ -18,21 +18,31 @@ export class LocalKeyWallet extends BaseWallet {
   private privateKey: Hex | null = null
   private keyIndex: number = 0
   private availableKeys: LocalKeyInfo[] = []
+  private keysLoaded = false
+  private keysLoadingPromise: Promise<void> | null = null
 
   constructor(chainId: number = sepolia.id) {
     super(chainId)
     // Initialize keys asynchronously
-    this.loadAvailableKeys().catch(console.error)
+    this.keysLoadingPromise = this.loadAvailableKeys()
   }
 
-        private async loadAvailableKeys(): Promise<void> {
+  private async loadAvailableKeys(): Promise<void> {
+    if (this.keysLoaded) {
+      return
+    }
+
     try {
+      console.log('🔧 LocalKeyWallet: Loading available keys...')
+
       // Check availability via API
       const response = await fetch('/api/wallet-status')
       const data = await response.json()
 
       if (!data.localKeyAvailable) {
         this.availableKeys = []
+        this.keysLoaded = true
+        console.log('🔧 LocalKeyWallet: No local keys available')
         return
       }
 
@@ -45,36 +55,35 @@ export class LocalKeyWallet extends BaseWallet {
           index: keyInfo.index,
           address: keyInfo.address
         }))
+        console.log(`🔧 LocalKeyWallet: Loaded ${this.availableKeys.length} keys`)
       } else {
         this.availableKeys = []
+        console.log('🔧 LocalKeyWallet: No keys found in response')
       }
+
+      this.keysLoaded = true
     } catch (error) {
       console.error('❌ Failed to load available keys:', error)
       this.availableKeys = []
+      this.keysLoaded = true
     }
   }
 
-
-
   async getAvailableKeys(): Promise<LocalKeyInfo[]> {
+    // Wait for keys to be loaded if they're still loading
+    if (this.keysLoadingPromise) {
+      await this.keysLoadingPromise
+    }
     return this.availableKeys
   }
 
   // Check if keys are loaded
   async areKeysLoaded(): Promise<boolean> {
-    // If keys are already loaded, return true
-    if (this.availableKeys.length > 0) {
-      return true
+    // Wait for keys to be loaded if they're still loading
+    if (this.keysLoadingPromise) {
+      await this.keysLoadingPromise
     }
-
-    // If keys are not loaded, try to load them
-    try {
-      await this.loadAvailableKeys()
-      return this.availableKeys.length > 0
-    } catch (error) {
-      console.error('Failed to load keys:', error)
-      return false
-    }
+    return this.keysLoaded && this.availableKeys.length > 0
   }
 
   // Override signMessage to use server API (private keys stay on server)
