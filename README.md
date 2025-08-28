@@ -1,6 +1,6 @@
 # EIP-7702 Demo Project
 
-A Next.js application demonstrating EIP-7702 smart account functionality using both ZeroDev and MetaMask Delegation Toolkit implementations. This project showcases how to upgrade Externally Owned Accounts (EOAs) to support smart account functionality.
+A Next.js application demonstrating EIP-7702 smart account functionality using both ZeroDev and MetaMask Delegation Toolkit implementations. This project showcases how to upgrade Externally Owned Accounts (EOAs) to support smart account functionality with advanced loading states and user experience optimizations.
 
 ## 🏗️ Project Structure
 
@@ -9,31 +9,51 @@ src/
 ├── app/                    # Next.js App Router pages
 │   ├── layout.tsx         # Root layout
 │   ├── page.tsx           # Home page (redirects to EIP-7702)
-│   ├── eip7702/           # EIP-7702 route
-│   │   └── page.tsx       # MetaMask authorization page
-│   ├── wallet-actions/    # Wallet operations route
-│   │   └── page.tsx       # Wallet actions page
-│   └── zerodev/           # ZeroDev route
-│       └── page.tsx       # ZeroDev demo page
+│   ├── favicon.ico        # App favicon
+│   ├── api/               # API routes
+│   │   ├── local-addresses/    # Local addresses API
+│   │   ├── wallet-operations/  # Wallet operations API
+│   │   └── wallet-status/      # Wallet status API
+│   ├── components/        # App-specific components
+│   ├── config/           # App configuration
+│   ├── eip7702/          # EIP-7702 route
+│   ├── metamask-debug/   # MetaMask debugging tools
+│   ├── metamask-permits/ # MetaMask permits demo
+│   ├── performance-demo/ # Performance demonstration
+│   ├── wallet-actions/   # Wallet operations route
+│   ├── wallet-demo/      # Wallet demo (legacy)
+│   └── zerodev/          # ZeroDev route
 ├── components/            # Reusable UI components
 │   ├── ui/               # Basic UI components
+│   │   ├── PageSkeleton.tsx  # Reusable skeleton loading component
+│   │   ├── Button.tsx        # Button component
+│   │   ├── Card.tsx          # Card component
+│   │   ├── NetworkSelector.tsx # Network selection component
+│   │   └── index.ts          # UI components export
 │   ├── layout/           # Layout components
 │   │   ├── Navigation.tsx
 │   │   ├── GlobalWalletManager.tsx
 │   │   └── ClientWrapper.tsx
-│   └── wallet/           # Wallet-specific components
-│       ├── WalletSelector.tsx
-│       ├── WalletOperations.tsx
-│       └── index.ts
+│   ├── wallet/           # Wallet-specific components
+│   │   ├── WalletSelector.tsx
+│   │   ├── WalletOperations.tsx
+│   │   └── index.ts
+│   └── features/         # Feature-specific components
 ├── features/             # Feature modules
 │   ├── eip7702/         # EIP-7702 MetaMask implementation
-│   │   └── page.tsx
+│   ├── metamask-permits/ # MetaMask permits feature
 │   ├── wallet-actions/  # Wallet operations
-│   │   └── page.tsx
+│   │   ├── page.tsx
+│   │   ├── components/  # Wallet action components
+│   │   │   ├── WalletStatus.tsx
+│   │   │   ├── UseCaseCard.tsx
+│   │   │   ├── EIP7702Authorization.tsx
+│   │   │   ├── ERC20Permit.tsx
+│   │   │   └── OperationLogs.tsx
+│   │   ├── types/       # Type definitions
+│   │   └── utils/       # Utility functions
 │   ├── wallet-demo/     # Wallet demo (legacy)
-│   │   └── page.tsx
 │   └── zerodev/         # ZeroDev implementation
-│       └── page.tsx
 ├── lib/                  # Library configurations
 │   ├── providers.tsx     # Wagmi providers
 │   └── wallets/          # Modular wallet system
@@ -43,7 +63,10 @@ src/
 │       └── wallet-manager.ts
 ├── hooks/                # Custom React hooks
 │   ├── useEIP7702.ts     # EIP-7702 business logic
-│   └── useWalletManager.ts # Wallet management hook
+│   ├── useWalletManager.ts # Wallet management hook
+│   └── useWalletState.ts # Wallet state management
+├── contexts/             # React contexts
+│   └── WalletContext.tsx # Global wallet state management
 ├── types/                # TypeScript type definitions
 │   ├── index.ts
 │   └── wallet.ts         # Wallet type definitions
@@ -52,7 +75,10 @@ src/
 ├── config/               # Configuration files
 │   ├── config.ts         # Wagmi configuration
 │   ├── eip7702.ts        # EIP-7702 settings
-│   └── addresses.ts      # Contract addresses
+│   ├── delegateeContracts.ts # Centralized delegatee contract configuration
+│   ├── addresses.ts      # Contract addresses
+│   ├── index.ts          # Configuration exports
+│   └── README.md         # Configuration documentation
 └── styles/               # Global styles
     └── globals.css
 ```
@@ -73,6 +99,13 @@ docs/                     # Documentation
 ```
 
 ## 🚀 Features
+
+### Advanced Loading State Management
+- 🎨 **Skeleton Loading**: Modern skeleton UI components for improved perceived performance
+- ⚡ **Granular Loading**: Smart loading states that only affect relevant UI sections
+- 🔄 **Auto-Connection**: Seamless wallet auto-connection with proper loading feedback
+- 📱 **Responsive Design**: Optimized loading states for all screen sizes
+- 🎯 **Context-Aware Loading**: Different loading states for different operations (auto-connect, account switching, delegation checking)
 
 ### Modular Wallet System
 - 🔑 **Local Private Key Wallet**: Environment-based private key management
@@ -217,6 +250,22 @@ npm run check-account    # Check account status
 
 ## 🎯 Usage
 
+### Advanced Loading States
+
+The application implements sophisticated loading state management:
+
+#### Loading State Types
+- **Initial Page Load**: Full-page skeleton loading during app initialization
+- **Auto-Connection**: Skeleton loading when automatically connecting to KEY0
+- **Account Switching**: Granular loading for wallet status during account changes
+- **Delegation Checking**: Smart loading states for delegation status verification
+
+#### Granular Loading Implementation
+- **PageSkeleton Component**: Reusable skeleton UI for consistent loading experience
+- **Context-Aware Loading**: Different loading states for different operations
+- **Non-Blocking UI**: Available actions remain interactive during wallet operations
+- **Smart State Management**: Loading states managed through React Context
+
 ### Modular Wallet System
 
 The Modular Wallet System provides a unified interface for managing multiple wallet types:
@@ -262,6 +311,43 @@ npm run check-account
 ```
 
 ## 🏛️ Architecture
+
+### Loading State Architecture
+
+The application implements a sophisticated loading state management system:
+
+#### Core Components
+
+- **`src/contexts/WalletContext.tsx`**: Centralized wallet state management
+  - Global loading states (`isAutoConnecting`, `isRenewingAccount`)
+  - Wallet connection and account management
+  - Delegation status tracking
+  - Non-blocking UI rendering
+
+- **`src/components/ui/PageSkeleton.tsx`**: Reusable skeleton loading component
+  - Consistent loading UI across the application
+  - Mimics main page structure during loading
+  - Animated pulse effects for better UX
+
+- **`src/features/wallet-actions/components/`**: Granular loading components
+  - `WalletStatus.tsx`: Context-aware loading for wallet status
+  - `UseCaseCard.tsx`: Interactive action cards with loading states
+  - `OperationLogs.tsx`: Real-time operation logging
+
+#### Loading State Flow
+
+1. **Initial Load**: `PageSkeleton` displayed during app initialization
+2. **Auto-Connection**: Skeleton loading when connecting to default account
+3. **Account Switching**: Granular loading for wallet status section
+4. **Delegation Checking**: Smart loading states for delegation verification
+5. **Action Execution**: Non-blocking loading for specific operations
+
+#### State Management
+
+- **`isAutoConnecting`**: Tracks automatic wallet connection process
+- **`isRenewingAccount`**: Combines delegation checking and account switching
+- **`isLoading`**: General loading state for wallet operations
+- **Granular Loading**: Component-specific loading states for better UX
 
 ### Modular Wallet System Architecture
 
@@ -344,6 +430,36 @@ The project uses a feature-based architecture:
 
 ## 🔧 Configuration
 
+### Centralized Configuration Management
+
+The project uses a centralized configuration approach to prevent duplication:
+
+#### Delegatee Contracts Configuration
+- **`src/config/delegateeContracts.ts`**: Single source of truth for delegatee contract information
+- **`src/config/eip7702.ts`**: Imports centralized configuration to avoid duplication
+- **Benefits**: Consistent contract data across the application, easier maintenance
+
+#### Configuration Structure
+```typescript
+// Centralized delegatee contracts (delegateeContracts.ts)
+export const DELEGATEE_CONTRACTS: DelegateeContract[] = [
+  {
+    name: 'MetaMask deleGator Core',
+    description: 'Core delegation contract for MetaMask',
+    address: addresses.delegatee.metamask,
+    requiresInjected: true
+  },
+  // ... more contracts
+]
+
+// EIP-7702 configuration imports centralized data (eip7702.ts)
+import { DELEGATEE_CONTRACTS } from './delegateeContracts'
+export const EIP7702_CONFIG = {
+  // ... other config
+  delegateeContracts: DELEGATEE_CONTRACTS,
+}
+```
+
 ### Network Configuration
 
 Supported networks are configured in `src/config/`:
@@ -405,16 +521,31 @@ Each wallet type supports different capabilities:
 - **[API Documentation](docs/api/)**: Technical API references
 - **[Examples](docs/examples/)**: Code examples and tutorials
 
-## 🎯 Modular Wallet System Benefits
+## 🎯 Advanced Features Benefits
 
-### For Developers
+### Loading State Management
+- **Improved UX**: Skeleton loading provides better perceived performance
+- **Granular Control**: Only affected UI sections show loading states
+- **Non-Blocking**: Available actions remain interactive during operations
+- **Context-Aware**: Different loading states for different operations
+- **Consistent Experience**: Reusable skeleton components ensure consistency
+
+### Configuration Management
+- **DRY Principle**: No duplicate configuration across files
+- **Single Source of Truth**: All contract data centralized
+- **Easier Maintenance**: Changes only need to be made in one place
+- **Type Safety**: Centralized type definitions prevent inconsistencies
+
+### Modular Wallet System Benefits
+
+#### For Developers
 - **Unified Interface**: Single API for multiple wallet types
 - **Type Safety**: Full TypeScript support with strict typing
 - **Extensible**: Easy to add new wallet implementations
 - **Capability Detection**: Automatic feature support checking
 - **Cross-Wallet Compatibility**: EIP-7702 works across all wallet types
 
-### For Users
+#### For Users
 - **Flexibility**: Choose from multiple wallet options
 - **Consistency**: Same experience across different wallet types
 - **Security**: Environment-based private key management
@@ -455,3 +586,4 @@ For support and questions:
 - Review the documentation in the `docs/` directory
 - Ensure you're connected to the correct network
 - Verify your wallet has sufficient funds for gas fees
+- Check loading states and skeleton UI for operation progress

@@ -4,13 +4,13 @@ import { DelegateeContract } from '../features/wallet-actions/types/eip7702'
 // Centralized delegatee contract configuration
 export const DELEGATEE_CONTRACTS: DelegateeContract[] = [
   {
-    name: 'MetaMask deleGator Core',
+    name: 'MetaMask deleGator Core 7710',
     description: 'Core delegation contract for MetaMask',
     address: addresses.delegatee.metamask,
     requiresInjected: true
   },
   {
-    name: 'Kernel ZeroDev 7702',
+    name: 'Kernel ZeroDev 7579',
     description: 'ZeroDev delegation contract implementing EIP-7579',
     address: addresses.delegatee.kernel,
     requiresInjected: true
