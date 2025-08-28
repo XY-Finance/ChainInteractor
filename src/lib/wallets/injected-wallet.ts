@@ -214,8 +214,13 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
-  // Override getDelegateeOptionsWithReasons for MetaMask
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    // Override getDelegateeOptionsWithReasons for MetaMask
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    // CRITICAL ERROR: currentDelegations should NEVER be null
+    if (!currentDelegations) {
+      throw new Error(`🚨 CRITICAL ERROR: currentDelegations is null! This should NEVER happen. Wallet type: ${this.getWalletType()}`)
+    }
+
     const availableOptions = options.filter(contract =>
       contract.address.toLowerCase() !== currentDelegations.toLowerCase()
     )

@@ -54,11 +54,11 @@ export interface WalletInterface {
   // EIP-7702 specific methods
   sign7702Authorization(authorizationData: unknown): Promise<any> // Returns authorization + verification data
   submit7702Authorization(signedAuthorization: any): Promise<Hex>
-  filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[]
+  filterCurrentDelegatee(currentDelegations: string | null, options: DelegateeContract[]): DelegateeContract[]
   isDelegateeSupported(delegateeAddress: string): boolean
 
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string }
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
 
   // EIP-7702 delegation status methods
   checkCurrentDelegation?(): Promise<void>

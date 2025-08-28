@@ -13,6 +13,7 @@ import {
   type WalletType,
   type LocalKeyInfo
 } from '../../types/wallet'
+import { addresses } from '../../config/addresses'
 
 export class LocalKeyWallet extends BaseWallet {
   private privateKey: Hex | null = null
@@ -33,8 +34,6 @@ export class LocalKeyWallet extends BaseWallet {
     }
 
     try {
-      console.log('🔧 LocalKeyWallet: Loading available keys...')
-
       // Check availability via API
       const response = await fetch('/api/wallet-status')
       const data = await response.json()
@@ -42,7 +41,6 @@ export class LocalKeyWallet extends BaseWallet {
       if (!data.localKeyAvailable) {
         this.availableKeys = []
         this.keysLoaded = true
-        console.log('🔧 LocalKeyWallet: No local keys available')
         return
       }
 
@@ -55,10 +53,8 @@ export class LocalKeyWallet extends BaseWallet {
           index: keyInfo.index,
           address: keyInfo.address
         }))
-        console.log(`🔧 LocalKeyWallet: Loaded ${this.availableKeys.length} keys`)
       } else {
         this.availableKeys = []
-        console.log('🔧 LocalKeyWallet: No keys found in response')
       }
 
       this.keysLoaded = true
@@ -350,14 +346,71 @@ export class LocalKeyWallet extends BaseWallet {
   }
 
   // EIP-7702 delegation status methods
-  async checkCurrentDelegation(): Promise<void> {
-    // Local key wallet doesn't support delegation checking
-    // This is primarily for injected wallets
+  private currentDelegation: string | null = null
+  private currentNonce: number | null = null
+
+    async checkCurrentDelegation(): Promise<void> {
+    const account = await this.getAccount()
+    if (!account) {
+      this.currentDelegation = null;
+      this.currentNonce = null;
+      return;
+    }
+
+    try {
+      // Check if the account has any code (indicating it might be a smart account)
+      const code = await this.publicClient.getCode({
+        address: account.address,
+        blockTag: 'latest'
+      });
+
+      // For EIP-7702, we need to check if the account has been delegated
+      // This is a simplified check - in a real implementation, you'd query the delegation contract
+      if (code === '0x') {
+        // Regular EOA - not delegated
+        this.currentDelegation = null;
+      } else {
+        // Check if this is EIP-7702 delegation bytecode
+        // EIP-7702 delegation starts with 0xef0100 followed by the delegatee address
+        if (code.startsWith('0xef0100')) {
+          // Extract the delegatee address (20 bytes = 40 hex chars after 0xef0100)
+          const delegateeAddress = '0x' + code.slice(8, 48); // 0xef0100 = 8 chars, + 40 chars for address
+
+          // Check if this delegatee is in our known list
+          const knownDelegatees = Object.values(addresses.delegatee);
+          const isKnownDelegatee = knownDelegatees.some(addr =>
+            addr.toLowerCase() === delegateeAddress.toLowerCase()
+          );
+
+          if (isKnownDelegatee) {
+            this.currentDelegation = delegateeAddress;
+          } else {
+            this.currentDelegation = delegateeAddress;
+          }
+        } else {
+          // Account has code but not EIP-7702 delegation format
+          this.currentDelegation = null;
+        }
+      }
+
+      // Get current nonce using publicClient
+      const nonce = await this.publicClient.getTransactionCount({
+        address: account.address,
+        blockTag: 'latest'
+      });
+
+      this.currentNonce = Number(nonce);
+
+    } catch (error) {
+      console.error('❌ LocalKeyWallet: Failed to check current delegation:', error);
+      // Set to not delegated on error
+      this.currentDelegation = null;
+      this.currentNonce = null;
+    }
   }
 
   getCurrentDelegation(): string | null {
-    // Local key wallet doesn't support delegation
-    return null
+    return this.currentDelegation;
   }
 
   async getCurrentNonce(): Promise<number | null> {

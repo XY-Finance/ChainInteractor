@@ -128,8 +128,12 @@ export abstract class BaseWallet implements WalletInterface {
     throw new Error('submit7702Authorization not implemented for this wallet type')
   }
 
-  // Delegatee filtering method
-  filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+    // Delegatee filtering method
+  filterCurrentDelegatee(currentDelegations: string | null, options: DelegateeContract[]): DelegateeContract[] {
+    // CRITICAL ERROR: currentDelegations should NEVER be null
+    if (!currentDelegations) {
+      throw new Error(`🚨 CRITICAL ERROR: currentDelegations is null! This should NEVER happen. Wallet type: ${this.getWalletType()}`)
+    }
     return options.filter(contract => contract.address.toLowerCase() !== currentDelegations.toLowerCase())
   }
 
@@ -152,7 +156,7 @@ export abstract class BaseWallet implements WalletInterface {
   }
 
   // Get delegatee options with detailed support information
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
     const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,

@@ -37,33 +37,24 @@ export class WalletManager {
   }
 
   private async initializeWallets(): Promise<void> {
-    console.log('🔧 WalletManager: Initializing wallets...')
-
     // Initialize local key wallet
     const isLocalWalletAvailable = await LocalKeyWallet.isAvailable()
-    console.log('🔧 WalletManager: Local wallet available:', isLocalWalletAvailable)
     if (isLocalWalletAvailable) {
       const localWallet = new LocalKeyWallet()
       this.wallets.set('local-key', localWallet)
-      console.log('🔧 WalletManager: Local wallet initialized')
 
       // Wait for local keys to be loaded
-      console.log('🔧 WalletManager: Waiting for local keys to load...')
       await localWallet.areKeysLoaded()
-      console.log('🔧 WalletManager: Local keys loaded')
     }
 
     // Initialize injected wallet (MetaMask)
     const isInjectedWalletAvailable = await InjectedWallet.isAvailable()
-    console.log('🔧 WalletManager: Injected wallet available:', isInjectedWalletAvailable)
     if (isInjectedWalletAvailable) {
       const injectedWallet = new InjectedWallet()
       this.wallets.set('injected', injectedWallet)
-      console.log('🔧 WalletManager: Injected wallet initialized')
     }
 
     this.isInitialized = true
-    console.log('🔧 WalletManager: Wallet initialization complete. Wallets:', Array.from(this.wallets.keys()))
   }
 
   // Get available wallet configurations
@@ -114,12 +105,9 @@ export class WalletManager {
     const localWallet = this.wallets.get('local-key')
     if (localWallet) {
       try {
-        console.log('🔧 WalletManager: Attempting auto-connect to KEY0...')
         const account = await this.connectWallet('local-key', 0)
-        console.log('🔧 WalletManager: Auto-connected to KEY0:', account.address)
         return account
       } catch (error) {
-        console.log('🔧 WalletManager: Failed to auto-connect to KEY0:', error)
         // Continue to try other wallets if local-key fails
       }
     }
@@ -128,16 +116,13 @@ export class WalletManager {
     const injectedWallet = this.wallets.get('injected')
     if (injectedWallet) {
       try {
-        console.log('🔧 WalletManager: Attempting auto-connect to injected wallet...')
         const account = await this.connectWallet('injected')
-        console.log('🔧 WalletManager: Auto-connected to injected wallet:', account.address)
         return account
       } catch (error) {
-        console.log('🔧 WalletManager: Failed to auto-connect to injected wallet:', error)
+        // Continue to try other wallets if injected wallet fails
       }
     }
 
-    console.log('🔧 WalletManager: No auto-connect successful')
     return null
   }
 
@@ -171,7 +156,6 @@ export class WalletManager {
           this.currentAccount = newAccount
           if (!newAccount) {
             this.currentWallet = null
-          } else {
           }
 
           // Notify React context of state change

@@ -76,6 +76,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [availableWallets, setAvailableWallets] = useState<WalletConfig[]>([])
   const [currentDelegation, setCurrentDelegation] = useState<string | null>(null)
   const [currentNonce, setCurrentNonce] = useState<number | null>(null)
+  const [isDelegationChecked, setIsDelegationChecked] = useState(false)
 
   // Prevent hydration issues
   useEffect(() => {
@@ -105,13 +106,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const performAutoConnect = async () => {
       try {
-        console.log('🔄 WalletContext: Attempting auto-connect...')
         const account = await walletManager.autoConnectToKey0()
         if (account) {
-          console.log('🔄 WalletContext: Auto-connect successful:', account.address)
-          updateState()
-        } else {
-          console.log('🔄 WalletContext: Auto-connect not available')
+          await updateState()
         }
       } catch (error) {
         console.error('🔄 WalletContext: Auto-connect failed:', error)
@@ -122,13 +119,68 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [mounted, walletManager])
 
   // Update state from wallet manager
-  const updateState = useCallback(() => {
+  const updateState = useCallback(async () => {
     const account = walletManager.getCurrentAccount()
     const connected = walletManager.isConnected()
 
     setCurrentAccount(account)
     setIsConnected(connected)
-  }, [walletManager])
+
+    // If wallet is connected, immediately check delegation synchronously
+    if (connected && account) {
+      try {
+        await walletManager.checkCurrentDelegation()
+        const delegation = walletManager.getCurrentDelegation()
+        const nonce = await walletManager.getCurrentNonce()
+
+        setCurrentDelegation(delegation)
+        setCurrentNonce(nonce)
+        setIsDelegationChecked(true)
+      } catch (error) {
+        console.error('❌ Context: Immediate delegation check failed:', error)
+        setCurrentDelegation(null)
+        setCurrentNonce(null)
+        setIsDelegationChecked(true)
+      }
+    } else {
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+      setIsDelegationChecked(true)
+    }
+
+    // Return a promise that resolves after state updates are fully processed
+    return new Promise<void>((resolve) => {
+      // Use multiple microtasks to ensure ALL state updates are processed
+      queueMicrotask(() => {
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            resolve();
+          });
+        });
+      });
+    });
+  }, [walletManager, currentAccount, isConnected])
+
+  // Auto-connect to KEY0
+  const autoConnectToKey0 = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const account = await walletManager.autoConnectToKey0()
+      await updateState()
+      await checkCurrentDelegation();
+      return account
+    } catch (err) {
+      console.error('❌ Context: autoConnectToKey0 error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to auto-connect'
+      setError(errorMessage)
+      throw err
+    } finally {
+
+      setIsLoading(false)
+    }
+  }, [walletManager, updateState])
 
   // Set up state change callback - memoized callback to prevent recreation
   const stateChangeCallback = useCallback(() => {
@@ -153,24 +205,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return account
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect wallet'
-      setError(errorMessage)
-      throw err
-    } finally {
-      setIsLoading(false)
-    }
-  }, [walletManager, updateState])
-
-  // Auto-connect to KEY0
-  const autoConnectToKey0 = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const account = await walletManager.autoConnectToKey0()
-      updateState()
-      return account
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to auto-connect'
       setError(errorMessage)
       throw err
     } finally {
@@ -389,25 +423,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return await walletManager.getAllAvailableAccounts()
   }, [walletManager])
 
-  // Get clients
-  const getPublicClient = useCallback(() => {
-    return walletManager.getPublicClient()
-  }, [walletManager])
-
-  const getWalletClient = useCallback(() => {
-    return walletManager.getWalletClient()
-  }, [walletManager])
-
   // EIP-7702 delegation status
   const checkCurrentDelegation = useCallback(async () => {
     try {
-      console.log('🔄 Context: Starting delegation check...');
       await walletManager.checkCurrentDelegation()
       const delegation = walletManager.getCurrentDelegation()
       const nonce = await walletManager.getCurrentNonce()
-
-      console.log(`🔄 Context: Setting delegation to: ${delegation || 'null'}`);
-      console.log(`🔄 Context: Setting nonce to: ${nonce || 'null'}`);
 
       setCurrentDelegation(delegation)
       setCurrentNonce(nonce)
@@ -415,7 +436,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       console.error('❌ Context: Failed to check current delegation:', error)
       setCurrentDelegation(null)
       setCurrentNonce(null)
+      throw error; // Re-throw to trigger retry logic
     }
+  }, [walletManager])
+
+  // Get clients
+  const getPublicClient = useCallback(() => {
+    return walletManager.getPublicClient()
+  }, [walletManager])
+
+  const getWalletClient = useCallback(() => {
+    return walletManager.getWalletClient()
   }, [walletManager])
 
   // Clear error
@@ -489,6 +520,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     checkDelegationEffect()
   }, [checkDelegationEffect])
+
+
+
+
+
 
   // Memoized derived values to prevent unnecessary recalculations
   const address = useMemo(() => currentAccount?.address || null, [currentAccount?.address])
@@ -604,6 +640,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   if (!mounted) {
     return <div>Loading...</div>
+  }
+
+  // Block rendering until delegation is checked when wallet is connected
+  if (isConnected && currentAccount && !isDelegationChecked) {
+    return <div>Checking delegation status...</div>
+  }
+
+  // Additional check: if delegation is checked but still null, block render
+  if (isConnected && currentAccount && isDelegationChecked && !currentDelegation) {
+    return <div>Delegation check completed but result is null...</div>
+  }
+
+
+
+  // CRITICAL ERROR: currentDelegation should NEVER be null when wallet is connected AND delegation has been checked
+  if (isConnected && currentAccount && isDelegationChecked && !currentDelegation) {
+    throw new Error(`🚨 CRITICAL ERROR: currentDelegation is null while wallet is connected! Account: ${currentAccount.address}, Type: ${currentAccount.type}`)
   }
 
   return (
