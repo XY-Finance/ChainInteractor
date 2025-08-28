@@ -8,6 +8,7 @@ export function getDelegationDisplayName(delegationAddress: string | null): stri
   // Check against known delegatee contracts
   const knownContracts = [
     { address: addresses.delegatee.metamask, name: 'MetaMask deleGator Core' },
+    { address: addresses.delegatee.kernel, name: 'Kernel ZeroDev 7702' },
     // Add more known contracts as needed
   ]
 

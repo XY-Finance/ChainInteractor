@@ -62,6 +62,12 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
       requiresInjected: true
     },
     {
+      name: 'Kernel ZeroDev 7702',
+      description: 'ZeroDev delegation contract implementing EIP-7579',
+      address: addresses.delegatee.kernel,
+      requiresInjected: true
+    },
+    {
       name: 'No Delegation (Revoke)',
       description: 'Revoke current delegation (set to zero address)',
       address: addresses.common.zero,

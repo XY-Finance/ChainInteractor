@@ -28,6 +28,11 @@ export const EIP7702_CONFIG = {
       implementation: 'Stateless7702' as const,
     },
     {
+      name: 'Kernel ZeroDev 7702',
+      description: 'Kernel/ZeroDev developed EIP-7702 target implementation',
+      implementation: 'Stateless7702' as const,
+    },
+    {
       name: 'Custom EIP-7702 Delegator',
       description: 'Custom implementation for EIP-7702 delegation',
       implementation: 'Stateless7702' as const,

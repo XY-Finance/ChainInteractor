@@ -426,33 +426,6 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
-  // Helper method to check delegation status by querying the delegation contract
-  private async checkDelegationStatus(accountAddress: string): Promise<string | null> {
-    try {
-      // Query the delegation contract to check if the account is delegated
-      // This would require the delegation contract ABI and proper contract calls
-      // For now, we'll use a simplified approach
-
-      // Check if the account has any code (indicating it might be a smart account)
-      const code = await this.ethereum.request({
-        method: 'eth_getCode',
-        params: [accountAddress, 'latest']
-      });
-
-      if (code === '0x' || code === '0x0') {
-        return null; // Not delegated
-      }
-
-      // If the account has code, we need to determine what it's delegated to
-      // This would require querying the specific delegation contract
-      // For now, we'll return the MetaMask deleGator address as a placeholder
-      return addresses.delegatee.metamask;
-    } catch (error) {
-      console.error('Error checking delegation status:', error);
-      return null;
-    }
-  }
-
   getCurrentDelegation(): string | null {
     return this.currentDelegation;
   }

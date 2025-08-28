@@ -26,6 +26,7 @@ export const addresses = {
   // Delegatee contract addresses
   delegatee: {
     metamask: '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b' as Address,
+    kernel: '0xd6CEDDe84be40893d153Be9d467CD6aD37875b28' as Address,
   },
 
   // Contract addresses by network
@@ -50,6 +51,7 @@ import { addresses } from '../config/addresses'
 const usdcAddress = addresses.token.USDC
 const zeroAddress = addresses.common.zero
 const metamaskDelegatee = addresses.delegatee.metamask
+const kernelDelegatee = addresses.delegatee.kernel
 ```
 
 #### Helper Function
@@ -68,6 +70,7 @@ import { token, common, delegatee } from '../config/addresses'
 const usdcAddress = token.USDC
 const zeroAddress = common.zero
 const metamaskDelegatee = delegatee.metamask
+const kernelDelegatee = delegatee.kernel
 ```
 
 ### Benefits
