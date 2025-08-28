@@ -6,6 +6,7 @@ import { addresses } from '../../../config/addresses'
 import { sepolia } from 'viem/chains'
 import { parseEther } from 'viem'
 import { DelegateeContract } from '../types/eip7702'
+import { DELEGATEE_CONTRACTS } from '../../../config/delegateeContracts'
 
 interface EIP7702AuthorizationProps {
   addLog: (message: string) => void
@@ -53,27 +54,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
     logDelegationStatus()
   }, [logDelegationStatus])
 
-  // Available delegatee contracts
-  const DELEGATEE_CONTRACTS: DelegateeContract[] = [
-    {
-      name: 'MetaMask deleGator Core',
-      description: 'Core delegation contract for MetaMask',
-      address: addresses.delegatee.metamask,
-      requiresInjected: true
-    },
-    {
-      name: 'Kernel ZeroDev 7702',
-      description: 'ZeroDev delegation contract implementing EIP-7579',
-      address: addresses.delegatee.kernel,
-      requiresInjected: true
-    },
-    {
-      name: 'No Delegation (Revoke)',
-      description: 'Revoke current delegation (set to zero address)',
-      address: addresses.common.zero,
-      requiresInjected: false
-    }
-  ]
+  // Available delegatee contracts (imported from centralized config)
 
     // Memoized filtered delegatees to prevent unnecessary recalculations
     const filteredDelegatees = useMemo(() => {

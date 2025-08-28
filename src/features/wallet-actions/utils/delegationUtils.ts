@@ -1,20 +1,4 @@
 import { addresses } from '../../../config/addresses'
+import { getDelegationDisplayName } from '../../../config/delegateeContracts'
 
-export function getDelegationDisplayName(delegationAddress: string | null): string {
-  if (!delegationAddress || delegationAddress === addresses.common.zero) {
-    return 'Not delegated (Revoke)'
-  }
-
-  // Check against known delegatee contracts
-  const knownContracts = [
-    { address: addresses.delegatee.metamask, name: 'MetaMask deleGator Core' },
-    { address: addresses.delegatee.kernel, name: 'Kernel ZeroDev 7702' },
-    // Add more known contracts as needed
-  ]
-
-  const knownContract = knownContracts.find(contract =>
-    contract.address.toLowerCase() === delegationAddress.toLowerCase()
-  )
-
-  return knownContract ? knownContract.name : `Delegated to ${delegationAddress.slice(0, 6)}...${delegationAddress.slice(-4)}`
-}
+export { getDelegationDisplayName }
