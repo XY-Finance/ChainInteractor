@@ -366,7 +366,7 @@ export class LocalKeyWallet extends BaseWallet {
 
       // For EIP-7702, we need to check if the account has been delegated
       // This is a simplified check - in a real implementation, you'd query the delegation contract
-      if (code === '0x') {
+      if (!code || code === '0x') {
         // Regular EOA - not delegated
         this.currentDelegation = null;
       } else {
