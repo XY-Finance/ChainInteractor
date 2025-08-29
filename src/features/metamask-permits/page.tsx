@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePublicClient } from 'wagmi'
 import { useWalletManager } from '../../hooks/useWalletManager'
+import { AddressSelector } from '../../components/ui'
 import {
   parseEther,
   formatEther,
@@ -429,12 +430,10 @@ export default function WalletActionsPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Spender Address
                       </label>
-                      <input
-                        type="text"
+                      <AddressSelector
                         value={spenderAddress}
-                        onChange={(e) => setSpenderAddress(e.target.value)}
-                        placeholder="0x..."
-                        className="input-base"
+                        onChange={setSpenderAddress}
+                        placeholder="Select spender address..."
                       />
                     </div>
                     <div>

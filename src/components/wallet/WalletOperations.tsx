@@ -63,8 +63,8 @@ export function WalletOperations() {
         address: currentAccount?.address,
         chainId: 11155111, // Sepolia
         nonce: 0,
-        contractAddress: addresses.common.zero,
-        executor: addresses.common.zero
+        contractAddress: addresses.eoa.zero,
+        executor: addresses.eoa.zero
       }
 
       const sig = await sign7702Authorization(authorizationData)

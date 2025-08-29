@@ -8,8 +8,8 @@ export const addresses = {
     // Add other tokens as needed
   },
 
-  // Common user addresses
-  common: {
+  // EOA user addresses
+  eoa: {
     user0: '0x856c363e043Ac34B19D584D3930bfa615947994E' as Address,
     user1: '0x9C9F55ebc51D0D606227790d14Afcb706178dE98' as Address,
     user2: '0x51c7D4C1965230EE5525eFb6e5D7c5C9E4b8f7238' as Address,
@@ -59,7 +59,7 @@ export function getAddress(path: keyof AddressConfig | `${keyof AddressConfig}.$
 // Convenience exports for commonly used addresses
 export const {
   token,
-  common,
+  eoa,
   delegatee,
   contracts,
 } = addresses

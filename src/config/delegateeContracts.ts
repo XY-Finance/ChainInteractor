@@ -18,7 +18,7 @@ export const DELEGATEE_CONTRACTS: DelegateeContract[] = [
   {
     name: 'No Delegation (Revoke)',
     description: 'Revoke current delegation (set to zero address)',
-    address: addresses.common.zero,
+    address: addresses.eoa.zero,
     requiresInjected: false
   }
 ]
@@ -38,7 +38,7 @@ export function getContractByAddress(address: string): DelegateeContract | undef
 
 // Helper function to get display name for delegation address
 export function getDelegationDisplayName(delegationAddress: string | null): string {
-  if (!delegationAddress || delegationAddress === addresses.common.zero) {
+  if (!delegationAddress || delegationAddress === addresses.eoa.zero) {
     return 'Not delegated (Revoke)'
   }
 

@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
+import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { encodeFunctionData, type Address, isAddress } from 'viem'
 import ParameterInput from './ParameterInput'
@@ -657,19 +658,16 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
                 <label htmlFor="targetAddress" className="block text-sm font-medium text-gray-700 mb-2">
                   Target Contract Address
                 </label>
-                <input
-                  id="targetAddress"
-                  type="text"
+                <AddressSelector
                   value={transactionData.targetAddress}
-                  onChange={(e) => updateTargetAddress(e.target.value)}
-                  placeholder="0x..."
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent ${
-                    transactionData.targetAddress.trim()
-                      ? validationState.targetAddress.isValid
-                        ? 'border-green-300 focus:ring-green-500'
-                        : 'border-red-300 focus:ring-red-500'
-                      : 'border-gray-300 focus:ring-blue-500'
-                  }`}
+                  onChange={updateTargetAddress}
+                  placeholder="Select contract address..."
+                  className={transactionData.targetAddress.trim()
+                    ? validationState.targetAddress.isValid
+                      ? 'border-green-300 focus:ring-green-500'
+                      : 'border-red-300 focus:ring-red-500'
+                    : ''
+                  }
                 />
                 {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
                   <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>

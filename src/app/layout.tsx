@@ -4,6 +4,7 @@ import "../styles/globals.css";
 import { Providers } from '../lib/providers';
 import Navigation from '../components/layout/Navigation';
 import { ClientWrapper } from '../components/layout/ClientWrapper';
+import { AddressBook } from '../components/ui';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
           <ClientWrapper>
             <Navigation />
             {children}
+            <AddressBook />
           </ClientWrapper>
         </Providers>
       </body>
