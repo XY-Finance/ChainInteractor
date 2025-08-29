@@ -138,13 +138,12 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
     }
   }, [transactionData])
 
-  // Check if all inputs are valid
+    // Check if all inputs are valid (for encoding - target address not required)
   const isAllValid = useMemo(() => {
     const functionNameValid = validationState.functionName.isValid
-    const targetAddressValid = validationState.targetAddress.isValid
     const allParametersValid = Object.values(validationState.parameters).every(v => v.isValid)
 
-    return functionNameValid && targetAddressValid && allParametersValid
+    return functionNameValid && allParametersValid
   }, [validationState])
 
   // Add a new parameter
@@ -376,29 +375,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
               <p className="mt-1 text-sm text-red-600">{validationState.functionName.message}</p>
             )}
           </div>
-
-          <div>
-            <label htmlFor="targetAddress" className="block text-sm font-medium text-gray-700 mb-2">
-              Target Contract Address
-            </label>
-            <input
-              id="targetAddress"
-              type="text"
-              value={transactionData.targetAddress}
-              onChange={(e) => updateTargetAddress(e.target.value)}
-              placeholder="0x..."
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent ${
-                transactionData.targetAddress.trim()
-                  ? validationState.targetAddress.isValid
-                    ? 'border-green-300 focus:ring-green-500'
-                    : 'border-red-300 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500'
-              }`}
-            />
-            {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
-              <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
-            )}
-          </div>
         </div>
       </Card>
 
@@ -448,15 +424,42 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
               🔧 Encode Data {!isAllValid ? '(Fix validation errors)' : ''}
             </Button>
 
-            <Button
-              onClick={sendTransactionData}
-              loading={isSending}
-              disabled={!transactionData.encodedData || !currentAccount}
-              variant="success"
-              className="w-full"
-            >
-              📤 Send Transaction
-            </Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="targetAddress" className="block text-sm font-medium text-gray-700 mb-2">
+                  Target Contract Address
+                </label>
+                <input
+                  id="targetAddress"
+                  type="text"
+                  value={transactionData.targetAddress}
+                  onChange={(e) => updateTargetAddress(e.target.value)}
+                  placeholder="0x..."
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent ${
+                    transactionData.targetAddress.trim()
+                      ? validationState.targetAddress.isValid
+                        ? 'border-green-300 focus:ring-green-500'
+                        : 'border-red-300 focus:ring-red-500'
+                      : 'border-gray-300 focus:ring-blue-500'
+                  }`}
+                />
+                {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
+                  <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
+                )}
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  onClick={sendTransactionData}
+                  loading={isSending}
+                  disabled={!transactionData.encodedData || !currentAccount || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                  variant="success"
+                  className="w-full"
+                >
+                  📤 Send Transaction
+                </Button>
+              </div>
+            </div>
 
             <Button
               onClick={() => {
