@@ -9,6 +9,10 @@ interface ParameterInputProps {
   validation?: { isValid: boolean; message: string }
   onUpdate: (field: keyof Parameter, value: string) => void
   onRemove: () => void
+  onAddTupleComponent?: () => void
+  depth?: number
+  parentId?: string
+  isTupleComponent?: boolean
 }
 
 // localStorage utilities for recent values
@@ -46,14 +50,19 @@ const SOLIDITY_TYPES = [
   'bytes8',
   'bytes4',
   'bytes2',
-  'bytes1'
+  'bytes1',
+  'tuple'
 ]
 
 const ParameterInput = React.memo(function ParameterInput({
   parameter,
   validation,
   onUpdate,
-  onRemove
+  onRemove,
+  onAddTupleComponent,
+  depth = 0,
+  parentId,
+  isTupleComponent = false
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && parameter.value.trim()
 
@@ -111,6 +120,151 @@ const ParameterInput = React.memo(function ParameterInput({
     valueInputRef.current?.blur()
   }
 
+      // Handle tuple component updates
+  const handleTupleComponentUpdate = (componentId: string, field: keyof Parameter, value: string) => {
+    const currentComponents = parameter.components || []
+
+    const updatedComponents = currentComponents.map(comp =>
+      comp.id === componentId ? { ...comp, [field]: value } : comp
+    )
+
+    // Reconstruct the tuple value from components
+    const tupleValue: any = {}
+    updatedComponents.forEach(comp => {
+      if (comp.name.trim()) {
+        tupleValue[comp.name] = comp.value
+      }
+    })
+
+    onUpdate('value', JSON.stringify(tupleValue))
+  }
+
+
+
+    // Add tuple component
+  const addTupleComponent = () => {
+    const newComponent: Parameter = {
+      id: Date.now().toString() + Math.random(),
+      name: '',
+      type: 'address',
+      value: ''
+    }
+
+    const currentComponents = parameter.components || []
+    const updatedComponents = [...currentComponents, newComponent]
+    onUpdate('components', JSON.stringify(updatedComponents))
+  }
+
+    // Remove tuple component
+  const removeTupleComponent = (componentId: string) => {
+    const currentComponents = parameter.components || []
+    const updatedComponents = currentComponents.filter(comp => comp.id !== componentId)
+    onUpdate('components', JSON.stringify(updatedComponents))
+  }
+
+  // Handle nested tuple component updates
+  const handleNestedTupleComponentUpdate = (parentComponentId: string, nestedComponentId: string, field: keyof Parameter, value: string) => {
+    const currentComponents = parameter.components || []
+
+    const updatedComponents = currentComponents.map(comp => {
+      if (comp.id === parentComponentId && comp.components) {
+        const updatedNestedComponents = comp.components.map(nestedComp =>
+          nestedComp.id === nestedComponentId ? { ...nestedComp, [field]: value } : nestedComp
+        )
+
+        // Reconstruct the nested tuple value
+        const nestedTupleValue: any = {}
+        updatedNestedComponents.forEach(nestedComp => {
+          if (nestedComp.name.trim()) {
+            nestedTupleValue[nestedComp.name] = nestedComp.value
+          }
+        })
+
+        return {
+          ...comp,
+          components: updatedNestedComponents,
+          value: JSON.stringify(nestedTupleValue)
+        }
+      }
+      return comp
+    })
+
+    // Reconstruct the parent tuple value
+    const parentTupleValue: any = {}
+    updatedComponents.forEach(comp => {
+      if (comp.name.trim()) {
+        parentTupleValue[comp.name] = comp.value
+      }
+    })
+
+    onUpdate('components', JSON.stringify(updatedComponents))
+    onUpdate('value', JSON.stringify(parentTupleValue))
+  }
+
+  // Add nested tuple component
+  const addNestedTupleComponent = (parentComponentId: string) => {
+    const currentComponents = parameter.components || []
+
+    const updatedComponents = currentComponents.map(comp => {
+      if (comp.id === parentComponentId) {
+        const newNestedComponent: Parameter = {
+          id: Date.now().toString() + Math.random(),
+          name: '',
+          type: 'address',
+          value: ''
+        }
+
+        const currentNestedComponents = comp.components || []
+        const updatedNestedComponents = [...currentNestedComponents, newNestedComponent]
+
+        return {
+          ...comp,
+          components: updatedNestedComponents
+        }
+      }
+      return comp
+    })
+
+    onUpdate('components', JSON.stringify(updatedComponents))
+  }
+
+  // Remove nested tuple component
+  const removeNestedTupleComponent = (parentComponentId: string, nestedComponentId: string) => {
+    const currentComponents = parameter.components || []
+
+    const updatedComponents = currentComponents.map(comp => {
+      if (comp.id === parentComponentId && comp.components) {
+        const updatedNestedComponents = comp.components.filter(nestedComp => nestedComp.id !== nestedComponentId)
+
+        // Reconstruct the nested tuple value
+        const nestedTupleValue: any = {}
+        updatedNestedComponents.forEach(nestedComp => {
+          if (nestedComp.name.trim()) {
+            nestedTupleValue[nestedComp.name] = nestedComp.value
+          }
+        })
+
+        return {
+          ...comp,
+          components: updatedNestedComponents,
+          value: JSON.stringify(nestedTupleValue)
+        }
+      }
+      return comp
+    })
+
+    // Reconstruct the parent tuple value
+    const parentTupleValue: any = {}
+    updatedComponents.forEach(comp => {
+      if (comp.name.trim()) {
+        parentTupleValue[comp.name] = comp.value
+      }
+    })
+
+    onUpdate('components', JSON.stringify(updatedComponents))
+    onUpdate('value', JSON.stringify(parentTupleValue))
+  }
+
   // Save recent values when parameter is valid
   useEffect(() => {
     if (validation?.isValid) {
@@ -138,15 +292,26 @@ const ParameterInput = React.memo(function ParameterInput({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+
+
+
+
   return (
     <div className={`border rounded-lg p-4 ${
       isInvalid
         ? 'border-red-300 bg-red-50'
         : 'border-gray-200 bg-gray-50'
     }`}>
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+        {/* Depth Column */}
+        <div className="md:col-span-1">
+          <div className="text-xs text-gray-500 font-medium text-center">
+            {depth + 1}
+          </div>
+        </div>
+
         {/* Parameter Name */}
-        <div className="relative md:col-span-1">
+        <div className="relative md:col-span-2">
           <input
             ref={nameInputRef}
             type="text"
@@ -184,7 +349,7 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
 
         {/* Parameter Type */}
-        <div className="md:col-span-1">
+        <div className="md:col-span-2">
           <select
             value={parameter.type}
             onChange={(e) => onUpdate('type', e.target.value)}
@@ -203,7 +368,7 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
 
         {/* Parameter Value */}
-        <div className="relative md:col-span-3">
+        <div className="relative md:col-span-6">
           {parameter.type === 'bool' ? (
             <div className="flex items-center justify-center h-10">
               <button
@@ -224,6 +389,15 @@ const ParameterInput = React.memo(function ParameterInput({
               <span className="ml-3 text-sm font-medium text-gray-700">
                 {parameter.value === 'true' ? 'true' : 'false'}
               </span>
+            </div>
+          ) : parameter.type === 'tuple' ? (
+            <div className="flex items-center justify-center h-10">
+              <button
+                onClick={onAddTupleComponent}
+                className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-2 rounded transition-colors border border-blue-200"
+              >
+                ➕ Add Component
+              </button>
             </div>
           ) : (
             <>
@@ -326,6 +500,8 @@ function getPlaceholderForType(type: string): string {
     case 'bytes2':
     case 'bytes1':
       return '0x...'
+    case 'tuple':
+      return 'Add components below'
     default:
       return 'Enter value'
   }
@@ -362,6 +538,8 @@ function getTypeHint(type: string): string {
     case 'bytes2':
     case 'bytes1':
       return 'Enter hex data (0x followed by hex characters)'
+    case 'tuple':
+      return 'Add components to define the tuple structure'
     default:
       return ''
   }

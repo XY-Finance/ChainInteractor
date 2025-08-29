@@ -14,6 +14,7 @@ export interface Parameter {
   name: string
   type: string
   value: string
+  components?: Parameter[] // For tuple types
 }
 
 export interface TransactionData {
@@ -104,6 +105,30 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
         return { isValid: false, message: 'Must be hex format (0x...)' }
       }
       break
+    case 'tuple':
+      if (parameter.components && parameter.components.length > 0) {
+        try {
+          const tupleValue = JSON.parse(value)
+          // Validate each component
+          for (const component of parameter.components) {
+            if (!(component.name in tupleValue)) {
+              return { isValid: false, message: `Missing component: ${component.name}` }
+            }
+            const componentValidation = validateParameter({
+              ...component,
+              value: String(tupleValue[component.name])
+            })
+            if (!componentValidation.isValid) {
+              return { isValid: false, message: `Invalid ${component.name}: ${componentValidation.message}` }
+            }
+          }
+        } catch (error) {
+          return { isValid: false, message: 'Invalid JSON format for tuple' }
+        }
+      } else {
+        return { isValid: false, message: 'Tuple must have components defined' }
+      }
+      break
   }
 
   return { isValid: true, message: '' }
@@ -163,23 +188,141 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
     addLog('➕ Added new parameter field')
   }, [addLog])
 
-  // Remove a parameter
-  const removeParameter = useCallback((id: string) => {
+  // Add a new tuple component (recursive function to handle nested tuples)
+  const addTupleComponent = useCallback((parameterId: string) => {
     setTransactionData(prev => ({
       ...prev,
-      parameters: prev.parameters.filter(p => p.id !== id)
+      parameters: prev.parameters.map(param => {
+        // If this is the target parameter (top level)
+        if (param.id === parameterId) {
+          const newComponent: Parameter = {
+            id: Date.now().toString() + Math.random(),
+            name: '',
+            type: 'address',
+            value: ''
+          }
+          const updatedComponents = [...(param.components || []), newComponent]
+          return {
+            ...param,
+            components: updatedComponents
+          }
+        }
+
+        // If this parameter has tuple components, search recursively
+        if (param.type === 'tuple' && param.components) {
+          const addComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.map(comp => {
+              if (comp.id === parameterId) {
+                const newComponent: Parameter = {
+                  id: Date.now().toString() + Math.random(),
+                  name: '',
+                  type: 'address',
+                  value: ''
+                }
+                return { ...comp, components: [...(comp.components || []), newComponent] }
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: addComponentsRecursive(comp.components) }
+              }
+
+              return comp
+            })
+          }
+
+          return { ...param, components: addComponentsRecursive(param.components) }
+        }
+
+        return param
+      })
+    }))
+  }, [])
+
+  // Remove a parameter (recursive function to handle tuple components at any depth)
+  const removeParameter = useCallback((id: string, parentId?: string) => {
+    setTransactionData(prev => ({
+      ...prev,
+      parameters: prev.parameters.map(p => {
+        // If this is the target parameter (top level)
+        if (p.id === id) {
+          return null // This will be filtered out
+        }
+
+        // If this parameter has tuple components, search recursively
+        if (p.type === 'tuple' && p.components) {
+          const removeComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.filter(comp => {
+              if (comp.id === id) {
+                return false // Remove this component
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: removeComponentsRecursive(comp.components) }
+              }
+
+              return true
+            })
+          }
+
+          return { ...p, components: removeComponentsRecursive(p.components) }
+        }
+
+        return p
+      }).filter(Boolean) as Parameter[] // Remove null values
     }))
 
     addLog('➖ Removed parameter field')
   }, [addLog])
 
-  // Update parameter
-  const updateParameter = useCallback((id: string, field: keyof Parameter, value: string) => {
+  // Update parameter (recursive function to handle tuple components at any depth)
+  const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
     setTransactionData(prev => ({
       ...prev,
-      parameters: prev.parameters.map(p =>
-        p.id === id ? { ...p, [field]: value } : p
-      )
+      parameters: prev.parameters.map(p => {
+        // If this is the target parameter (top level)
+        if (p.id === id) {
+          if (field === 'components') {
+            // Handle tuple components update
+            try {
+              const components = JSON.parse(value)
+              return { ...p, components }
+            } catch {
+              return p
+            }
+          }
+
+          // Initialize tuple components when type is changed to 'tuple'
+          if (field === 'type' && value === 'tuple' && !p.components) {
+            return { ...p, [field]: value, components: [] }
+          }
+
+          return { ...p, [field]: value }
+        }
+
+        // If this parameter has tuple components, search recursively
+        if (p.type === 'tuple' && p.components) {
+          const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.map(comp => {
+              if (comp.id === id) {
+                if (field === 'type' && value === 'tuple' && !comp.components) {
+                  return { ...comp, [field]: value, components: [] }
+                }
+                return { ...comp, [field]: value }
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: updateComponentsRecursive(comp.components) }
+              }
+
+              return comp
+            })
+          }
+
+          return { ...p, components: updateComponentsRecursive(p.components) }
+        }
+
+        return p
+      })
     }))
   }, [])
 
@@ -231,12 +374,25 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
     addLog('🔧 Encoding function data...')
 
     try {
+      // Recursive function to build ABI inputs with tuple support
+      const buildAbiInputs = (params: Parameter[]) => {
+        return params.map(p => {
+          const input: any = {
+            name: p.name,
+            type: p.type
+          }
+
+          if (p.type === 'tuple' && p.components && p.components.length > 0) {
+            input.components = buildAbiInputs(p.components)
+          }
+
+          return input
+        })
+      }
+
       // Create ABI item object
       const abiItem = {
-        inputs: transactionData.parameters.map(p => ({
-          name: p.name,
-          type: p.type
-        })),
+        inputs: buildAbiInputs(transactionData.parameters),
         name: transactionData.functionName,
         outputs: [], // TODO: We'll assume no outputs for now, can be enhanced later
         stateMutability: 'nonpayable', // TODO: Default to nonpayable, can be enhanced later
@@ -246,17 +402,43 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       console.log('ABI item:', abiItem)
       console.log('transactionData', transactionData)
 
-      // Prepare values for encoding
-      const values = transactionData.parameters.map(p => {
-        const value = p.value.trim()
+      // Recursive function to encode values with tuple support
+      const encodeValues = (params: Parameter[]): any[] => {
+        return params.map(p => {
+          const value = p.value.trim()
 
-        // Handle different types
-        switch (p.type) {
-          case 'address':
-            if (!isAddress(value)) {
-              throw new Error(`Invalid address format for parameter ${p.name}`)
+          // Handle tuple types
+          if (p.type === 'tuple' && p.components && p.components.length > 0) {
+            // For tuples, we need to parse the JSON value and encode each component
+            try {
+              const tupleValue = JSON.parse(value)
+              const encodedTuple: any[] = encodeValues(p.components).map((_: any, index: number) => {
+                const componentValue = tupleValue[p.components![index].name]
+                if (componentValue === undefined) {
+                  throw new Error(`Missing component ${p.components![index].name} in tuple ${p.name}`)
+                }
+                return encodeSingleValue(p.components![index], componentValue)
+              })
+              return encodedTuple
+            } catch (error) {
+              throw new Error(`Invalid tuple format for parameter ${p.name}: ${error instanceof Error ? error.message : String(error)}`)
             }
-            return value as Address
+          }
+
+          return encodeSingleValue(p, value)
+        })
+      }
+
+      // Helper function to encode a single value
+      const encodeSingleValue = (param: Parameter, value: any) => {
+        const stringValue = String(value).trim()
+
+        switch (param.type) {
+          case 'address':
+            if (!isAddress(stringValue)) {
+              throw new Error(`Invalid address format for parameter ${param.name}`)
+            }
+            return stringValue as Address
           case 'uint256':
           case 'uint':
           case 'uint8':
@@ -264,7 +446,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
           case 'uint32':
           case 'uint64':
           case 'uint128':
-            return BigInt(value)
+            return BigInt(stringValue)
           case 'int256':
           case 'int':
           case 'int8':
@@ -272,15 +454,25 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
           case 'int32':
           case 'int64':
           case 'int128':
-            return BigInt(value)
+            return BigInt(stringValue)
           case 'bool':
-            return value === 'true'
+            return stringValue === 'true'
           case 'string':
           case 'bytes':
+          case 'bytes32':
+          case 'bytes16':
+          case 'bytes8':
+          case 'bytes4':
+          case 'bytes2':
+          case 'bytes1':
+            return stringValue
           default:
-            return value
+            return stringValue
         }
-      })
+      }
+
+      // Prepare values for encoding
+      const values = encodeValues(transactionData.parameters)
 
       // Encode the function data
       const encodedData = encodeFunctionData({
@@ -381,25 +573,61 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       {/* Parameters */}
       <Card title="Function Parameters" subtitle="Add and configure function parameters">
         <div className="space-y-4">
-          {/* Column headers - only show when there are parameters */}
-          {transactionData.parameters.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 px-4">
-              <div className="text-sm font-medium text-gray-700">Name</div>
-              <div className="text-sm font-medium text-gray-700">Type</div>
-              <div className="text-sm font-medium text-gray-700 md:col-span-3">Value</div>
-              <div className="text-sm font-medium text-gray-700 text-center">Action</div>
-            </div>
-          )}
+                      {/* Column headers - only show when there are parameters */}
+            {transactionData.parameters.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
+                <div className="text-sm font-medium text-gray-700 text-center">Depth</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-2">Type</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-6">Value</div>
+                <div className="text-sm font-medium text-gray-700 text-center">Delete</div>
+              </div>
+            )}
 
-          {transactionData.parameters.map((parameter) => (
-            <ParameterInput
-              key={parameter.id}
-              parameter={parameter}
-              validation={validationState.parameters[parameter.id]}
-              onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
-              onRemove={() => removeParameter(parameter.id)}
-            />
-          ))}
+          {/* Flatten parameters and their tuple components for rendering */}
+          {(() => {
+            const flattenedRows: Array<{
+              parameter: Parameter
+              depth: number
+              parentId?: string
+              isTupleComponent: boolean
+            }> = []
+
+            const addParameterWithComponents = (param: Parameter, depth: number = 0, parentId?: string) => {
+              // Add the main parameter
+              flattenedRows.push({
+                parameter: param,
+                depth,
+                parentId,
+                isTupleComponent: depth > 0
+              })
+
+              // Add tuple components if this is a tuple
+              if (param.type === 'tuple' && param.components) {
+                param.components.forEach(component => {
+                  addParameterWithComponents(component, depth + 1, param.id)
+                })
+              }
+            }
+
+            transactionData.parameters.forEach(param => {
+              addParameterWithComponents(param)
+            })
+
+            return flattenedRows.map(({ parameter, depth, parentId, isTupleComponent }) => (
+              <ParameterInput
+                key={parameter.id}
+                parameter={parameter}
+                depth={depth}
+                parentId={parentId}
+                isTupleComponent={isTupleComponent}
+                validation={validationState.parameters[parameter.id]}
+                onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
+                onRemove={() => removeParameter(parameter.id)}
+                onAddTupleComponent={() => addTupleComponent(parameter.id)}
+              />
+            ))
+          })()}
 
           <Button
             onClick={addParameter}
