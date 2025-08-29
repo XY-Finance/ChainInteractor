@@ -4,7 +4,7 @@ import { type Address } from 'viem'
 export const addresses = {
   // Token addresses
   token: {
-    USDC: '0x1c7D4C1965230EE5525eFb6e5D7c5C9E4b8f7238' as Address,
+    USDC: '0x1C7D4c1965230eE5525efb6E5D7c5c9E4B8f7238' as Address,
     // Add other tokens as needed
   },
 

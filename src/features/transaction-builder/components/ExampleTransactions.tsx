@@ -3,6 +3,7 @@
 import React from 'react'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
+import { addresses } from '../../../config/addresses'
 
 interface ExampleTransaction {
   name: string
@@ -23,10 +24,10 @@ interface ExampleTransactionsProps {
 
 const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
   {
-    name: 'ERC20 Transfer',
-    description: 'Transfer ERC20 tokens to another address',
+    name: 'USDC Transfer',
+    description: 'Transfer USDC tokens to another address',
     functionName: 'transfer',
-    targetAddress: '0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8', // Example token address
+    targetAddress: addresses.token.USDC,
     parameters: [
       {
         name: 'to',
@@ -37,16 +38,16 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'amount',
         type: 'uint256',
-        value: '1000000000000000000',
-        description: 'Amount to transfer (in wei)'
+        value: '1000000', // 1 USDC (6 decimals)
+        description: 'Amount to transfer (in USDC units)'
       }
     ]
   },
   {
-    name: 'ERC20 Approve',
-    description: 'Approve another address to spend your tokens',
+    name: 'USDC Approve',
+    description: 'Approve another address to spend your USDC tokens',
     functionName: 'approve',
-    targetAddress: '0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8', // Example token address
+    targetAddress: addresses.token.USDC,
     parameters: [
       {
         name: 'spender',
@@ -57,48 +58,42 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'amount',
         type: 'uint256',
-        value: '1000000000000000000',
-        description: 'Amount to approve (in wei)'
+        value: '1000000', // 1 USDC (6 decimals)
+        description: 'Amount to approve (in USDC units)'
       }
     ]
   },
   {
-    name: 'ERC721 Transfer',
-    description: 'Transfer an NFT to another address',
-    functionName: 'transferFrom',
-    targetAddress: '0xB0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8', // Example NFT address
+    name: 'USDC Balance Check',
+    description: 'Check USDC balance of an address',
+    functionName: 'balanceOf',
+    targetAddress: addresses.token.USDC,
     parameters: [
       {
-        name: 'from',
+        name: 'owner',
         type: 'address',
         value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-        description: 'Current owner address'
-      },
-      {
-        name: 'to',
-        type: 'address',
-        value: '0x842d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-        description: 'New owner address'
-      },
-      {
-        name: 'tokenId',
-        type: 'uint256',
-        value: '1',
-        description: 'NFT token ID'
+        description: 'Address to check balance for'
       }
     ]
   },
   {
-    name: 'Simple Storage Set',
-    description: 'Set a value in a simple storage contract',
-    functionName: 'set',
-    targetAddress: '0xC0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8C8', // Example storage contract
+    name: 'USDC Allowance Check',
+    description: 'Check USDC allowance for a spender',
+    functionName: 'allowance',
+    targetAddress: addresses.token.USDC,
     parameters: [
       {
-        name: 'value',
-        type: 'uint256',
-        value: '42',
-        description: 'Value to store'
+        name: 'owner',
+        type: 'address',
+        value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        description: 'Token owner address'
+      },
+      {
+        name: 'spender',
+        type: 'address',
+        value: '0x842d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        description: 'Spender address'
       }
     ]
   }

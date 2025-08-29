@@ -1,13 +1,27 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '../../../components/ui/Button'
 import type { Parameter } from './TransactionBuilder'
 
 interface ParameterInputProps {
   parameter: Parameter
+  validation?: { isValid: boolean; message: string }
   onUpdate: (field: keyof Parameter, value: string) => void
   onRemove: () => void
+}
+
+// localStorage utilities for recent values
+const saveRecentValue = (type: string, value: string) => {
+  const key = `recent_${type}`
+  const recent = JSON.parse(localStorage.getItem(key) || '[]')
+  const updated = [value, ...recent.filter((v: string) => v !== value)].slice(0, 20)
+  localStorage.setItem(key, JSON.stringify(updated))
+}
+
+const getRecentValues = (type: string): string[] => {
+  const key = `recent_${type}`
+  return JSON.parse(localStorage.getItem(key) || '[]')
 }
 
 const SOLIDITY_TYPES = [
@@ -37,35 +51,148 @@ const SOLIDITY_TYPES = [
 
 const ParameterInput = React.memo(function ParameterInput({
   parameter,
+  validation,
   onUpdate,
   onRemove
 }: ParameterInputProps) {
+  const isInvalid = validation && !validation.isValid && parameter.value.trim()
+
+  // Dropdown state
+  const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false)
+  const [isValueDropdownOpen, setIsValueDropdownOpen] = useState(false)
+  const [filteredNameSuggestions, setFilteredNameSuggestions] = useState<string[]>([])
+  const [filteredValueSuggestions, setFilteredValueSuggestions] = useState<string[]>([])
+
+  // Refs for dropdown positioning
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const valueInputRef = useRef<HTMLInputElement>(null)
+  const nameDropdownRef = useRef<HTMLDivElement>(null)
+  const valueDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Get recent values for current parameter type
+  const recentValues = getRecentValues(parameter.type)
+  const recentNames = getRecentValues('parameter_names')
+
+  // Filter suggestions based on current input
+  const filterSuggestions = (input: string, suggestions: string[]) => {
+    if (!input.trim()) return suggestions
+    return suggestions.filter(s =>
+      s.toLowerCase().includes(input.toLowerCase())
+    )
+  }
+
+  // Handle name input changes
+  const handleNameChange = (value: string) => {
+    onUpdate('name', value)
+    const filtered = filterSuggestions(value, recentNames)
+    setFilteredNameSuggestions(filtered)
+    setIsNameDropdownOpen(filtered.length > 0 && value.trim() !== '')
+  }
+
+  // Handle value input changes
+  const handleValueChange = (value: string) => {
+    onUpdate('value', value)
+    const filtered = filterSuggestions(value, recentValues)
+    setFilteredValueSuggestions(filtered)
+    setIsValueDropdownOpen(filtered.length > 0 && value.trim() !== '')
+  }
+
+  // Handle name selection from dropdown
+  const handleNameSelect = (selectedName: string) => {
+    onUpdate('name', selectedName)
+    setIsNameDropdownOpen(false)
+    nameInputRef.current?.blur()
+  }
+
+  // Handle value selection from dropdown
+  const handleValueSelect = (selectedValue: string) => {
+    onUpdate('value', selectedValue)
+    setIsValueDropdownOpen(false)
+    valueInputRef.current?.blur()
+  }
+
+  // Save recent values when parameter is valid
+  useEffect(() => {
+    if (validation?.isValid) {
+      if (parameter.name.trim()) {
+        saveRecentValue('parameter_names', parameter.name.trim())
+      }
+      if (parameter.value.trim()) {
+        saveRecentValue(parameter.type, parameter.value.trim())
+      }
+    }
+  }, [validation?.isValid, parameter.name, parameter.value, parameter.type])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (nameDropdownRef.current && !nameDropdownRef.current.contains(event.target as Node)) {
+        setIsNameDropdownOpen(false)
+      }
+      if (valueDropdownRef.current && !valueDropdownRef.current.contains(event.target as Node)) {
+        setIsValueDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   return (
-    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+    <div className={`border rounded-lg p-4 ${
+      isInvalid
+        ? 'border-red-300 bg-red-50'
+        : 'border-gray-200 bg-gray-50'
+    }`}>
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
         {/* Parameter Name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Parameter Name
-          </label>
+        <div className="relative md:col-span-1">
           <input
+            ref={nameInputRef}
             type="text"
             value={parameter.name}
-            onChange={(e) => onUpdate('name', e.target.value)}
-            placeholder="e.g., to, amount, tokenId"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            onChange={(e) => handleNameChange(e.target.value)}
+            onFocus={() => {
+              const filtered = filterSuggestions(parameter.name, recentNames)
+              setFilteredNameSuggestions(filtered)
+              setIsNameDropdownOpen(filtered.length > 0)
+            }}
+            placeholder="Name (optional, e.g., to, amount)"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+              isInvalid
+                ? 'border-red-300 focus:ring-red-500'
+                : 'border-gray-300 focus:ring-blue-500'
+            }`}
           />
+          {/* Name Dropdown */}
+          {isNameDropdownOpen && filteredNameSuggestions.length > 0 && (
+            <div
+              ref={nameDropdownRef}
+              className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto"
+            >
+              {filteredNameSuggestions.map((suggestion, index) => (
+                <div
+                  key={index}
+                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                  onClick={() => handleNameSelect(suggestion)}
+                >
+                  {suggestion}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Parameter Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Type
-          </label>
+        <div className="md:col-span-1">
           <select
             value={parameter.type}
             onChange={(e) => onUpdate('type', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+              isInvalid
+                ? 'border-red-300 focus:ring-red-500'
+                : 'border-gray-300 focus:ring-blue-500'
+            }`}
           >
             {SOLIDITY_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -76,36 +203,95 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
 
         {/* Parameter Value */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Value
-          </label>
-          <input
-            type="text"
-            value={parameter.value}
-            onChange={(e) => onUpdate('value', e.target.value)}
-            placeholder={getPlaceholderForType(parameter.type)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-          />
+        <div className="relative md:col-span-3">
+          {parameter.type === 'bool' ? (
+            <div className="flex items-center justify-center h-10">
+              <button
+                type="button"
+                onClick={() => onUpdate('value', parameter.value === 'true' ? 'false' : 'true')}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                  parameter.value === 'true'
+                    ? 'bg-blue-600 focus:ring-blue-500'
+                    : 'bg-gray-200 focus:ring-gray-500'
+                } ${isInvalid ? 'ring-2 ring-red-500' : ''}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    parameter.value === 'true' ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className="ml-3 text-sm font-medium text-gray-700">
+                {parameter.value === 'true' ? 'true' : 'false'}
+              </span>
+            </div>
+          ) : (
+            <>
+              <input
+                ref={valueInputRef}
+                type="text"
+                value={parameter.value}
+                onChange={(e) => handleValueChange(e.target.value)}
+                onFocus={() => {
+                  const filtered = filterSuggestions(parameter.value, recentValues)
+                  setFilteredValueSuggestions(filtered)
+                  setIsValueDropdownOpen(filtered.length > 0)
+                }}
+                placeholder={getPlaceholderForType(parameter.type)}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+                  isInvalid
+                    ? 'border-red-300 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`}
+              />
+              {/* Value Dropdown */}
+              {isValueDropdownOpen && filteredValueSuggestions.length > 0 && (
+                <div
+                  ref={valueDropdownRef}
+                  className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto"
+                >
+                  {filteredValueSuggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                      onClick={() => handleValueSelect(suggestion)}
+                    >
+                      {suggestion}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Remove Button */}
-        <div>
-          <Button
+        <div className="md:col-span-1 flex justify-center">
+          <button
             onClick={onRemove}
-            variant="danger"
-            size="sm"
-            className="w-full"
+            className="p-2 text-white bg-red-500 hover:bg-red-600 rounded-md transition-colors"
+            title="Remove parameter"
           >
-            🗑️ Remove
-          </Button>
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Type-specific hints */}
-      <div className="mt-2 text-xs text-gray-500">
-        {getTypeHint(parameter.type)}
-      </div>
+      {/* Error message - only show when input is invalid */}
+      {isInvalid && (
+        <div className="mt-2 text-xs text-red-600">
+          {validation?.message}
+        </div>
+      )}
+
+      {/* Type-specific hints - only show when input is invalid */}
+      {isInvalid && (
+        <div className="mt-1 text-xs text-gray-500">
+          {getTypeHint(parameter.type)}
+        </div>
+      )}
     </div>
   )
 })
