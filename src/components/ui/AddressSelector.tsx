@@ -14,6 +14,12 @@ interface AddressSelectorProps {
 
 // localStorage utilities for recent addresses
 const saveRecentAddress = (address: string) => {
+  // Only save valid Ethereum addresses to localStorage
+  if (!isAddress(address)) {
+    console.warn('Attempted to save invalid address to localStorage:', address)
+    return
+  }
+
   const key = 'recent_addresses'
   const recent = JSON.parse(localStorage.getItem(key) || '[]')
   const updated = [address, ...recent.filter((v: string) => v !== address)].slice(0, 5)
@@ -22,7 +28,16 @@ const saveRecentAddress = (address: string) => {
 
 const getRecentAddresses = (): string[] => {
   const key = 'recent_addresses'
-  return JSON.parse(localStorage.getItem(key) || '[]')
+  const addresses = JSON.parse(localStorage.getItem(key) || '[]')
+  // Filter out any invalid addresses that might exist in localStorage
+  const validAddresses = addresses.filter((addr: string) => isAddress(addr))
+
+  // If we filtered out invalid addresses, update localStorage
+  if (validAddresses.length !== addresses.length) {
+    localStorage.setItem(key, JSON.stringify(validAddresses))
+  }
+
+  return validAddresses
 }
 
 export default function AddressSelector({
@@ -155,6 +170,21 @@ export default function AddressSelector({
     }
   }, [searchTerm, filteredCategories.length, selectedIndex, allFilteredAddresses, handleSelect])
 
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    let newValue = e.target.value
+
+    // Auto-add "0x" prefix for address input
+    if (newValue.length > 0 && !newValue.startsWith('0x')) {
+      // Check if it looks like a hex address (40 characters of hex)
+      const hexPattern = /^[0-9a-fA-F]{40}$/
+      if (hexPattern.test(newValue)) {
+        newValue = '0x' + newValue
+      }
+    }
+
+    setSearchTerm(newValue)
+  }, [])
+
   const handleToggle = useCallback(() => {
     if (!disabled) {
       setIsOpen(prev => !prev)
@@ -200,10 +230,66 @@ export default function AddressSelector({
     }
   }, [])
 
-  // Find the display value for the current value
-  const currentDisplayValue = value || ''
+  // Find the display value and key for the current value
+  const getDisplayInfo = () => {
+    if (!value) return { displayValue: '', key: null }
+
+    // Check if it's a config address (from addresses.ts)
+    for (const category of addressCategories) {
+      // Skip the 'recent' category as it contains custom addresses
+      if (category.category === 'recent') continue
+
+      const found = category.addresses.find(addr => addr.address === value)
+      if (found) {
+        return {
+          displayValue: value,
+          key: found.path
+        }
+      }
+    }
+
+    // If not found in config, it's a custom address - show only the address
+    return { displayValue: value, key: null }
+  }
+
+  const { displayValue, key } = getDisplayInfo()
 
   const isSearchTermValidAddress = searchTerm.trim() && isAddress(searchTerm.trim())
+
+  // Get the selected address for preview
+  const selectedAddress = selectedIndex >= 0 && selectedIndex < allFilteredAddresses.length
+    ? allFilteredAddresses[selectedIndex].address
+    : null
+
+  // Create preview text with greyed out parts
+  const getPreviewText = () => {
+    if (!selectedAddress || !searchTerm.trim()) {
+      return searchTerm
+    }
+
+    const searchLower = searchTerm.toLowerCase()
+    const addressLower = selectedAddress.toLowerCase()
+
+    // Find where the search term matches in the address
+    const matchIndex = addressLower.indexOf(searchLower)
+
+    if (matchIndex === -1) {
+      return searchTerm
+    }
+
+    // Split the address into parts: before match, match, after match
+    const beforeMatch = selectedAddress.substring(0, matchIndex)
+    const match = selectedAddress.substring(matchIndex, matchIndex + searchTerm.length)
+    const afterMatch = selectedAddress.substring(matchIndex + searchTerm.length)
+
+    return (
+      <>
+        <span className="text-gray-400">{beforeMatch}</span>
+        <span className="text-gray-900">{match}</span>
+        <span className="text-gray-400">{afterMatch}</span>
+      </>
+    )
+  }
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
@@ -219,15 +305,28 @@ export default function AddressSelector({
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className={`truncate ${value ? 'text-gray-900' : 'text-gray-500'}`}>
-            {value ? currentDisplayValue : placeholder}
-          </span>
-          <svg
-            className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <div className="flex-1 min-w-0">
+            {value ? (
+              <div className="flex items-center space-x-2">
+                <span className="truncate text-gray-900 font-mono">
+                  {displayValue}
+                </span>
+                {key && (
+                  <span className="text-gray-500 text-sm flex-shrink-0">
+                    {key}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <span className="text-gray-500">{placeholder}</span>
+            )}
+          </div>
+                      <svg
+              className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0 ml-2`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </div>
@@ -238,15 +337,25 @@ export default function AddressSelector({
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
           {/* Search Input */}
           <div className="p-2 border-b border-gray-200">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder="Search addresses or type a new address..."
-              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              autoFocus
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search addresses or type a new address..."
+                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-transparent relative z-10"
+                autoFocus
+              />
+              {/* Preview overlay */}
+              {selectedAddress && searchTerm.trim() && (
+                <div className="absolute inset-0 px-2 py-1 text-sm pointer-events-none">
+                  <div className="font-mono">
+                    {getPreviewText()}
+                  </div>
+                </div>
+              )}
+            </div>
             {isSearchTermValidAddress && filteredCategories.length === 0 && (
               <p className="mt-1 text-xs text-blue-600">
                 Press Enter to add this address
