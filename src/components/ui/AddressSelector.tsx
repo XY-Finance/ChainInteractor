@@ -10,6 +10,7 @@ interface AddressSelectorProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  defaultValue?: string
 }
 
 // localStorage utilities for recent addresses
@@ -45,13 +46,21 @@ export default function AddressSelector({
   onChange,
   placeholder = "Select address...",
   className = "",
-  disabled = false
+  disabled = false,
+  defaultValue
 }: AddressSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Set default value on mount if provided and no current value
+  useEffect(() => {
+    if (defaultValue && !value && isAddress(defaultValue)) {
+      onChange(defaultValue)
+    }
+  }, [defaultValue, value, onChange])
 
   // Get all addresses from config and localStorage
   const allConfigAddresses = new Set<string>()

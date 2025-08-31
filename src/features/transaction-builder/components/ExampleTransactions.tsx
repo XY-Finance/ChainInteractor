@@ -32,7 +32,7 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'to',
         type: 'address',
-        value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        value: addresses.eoa.user0,
         description: 'Recipient address'
       },
       {
@@ -52,7 +52,7 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'spender',
         type: 'address',
-        value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        value: addresses.eoa.user0,
         description: 'Address to approve'
       },
       {
@@ -72,7 +72,7 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'owner',
         type: 'address',
-        value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        value: addresses.eoa.user0,
         description: 'Address to check balance for'
       }
     ]
@@ -86,13 +86,13 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
       {
         name: 'owner',
         type: 'address',
-        value: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        value: addresses.eoa.user2,
         description: 'Token owner address'
       },
       {
         name: 'spender',
         type: 'address',
-        value: '0x842d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+        value: addresses.eoa.user0,
         description: 'Spender address'
       }
     ]

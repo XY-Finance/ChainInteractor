@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { parseEther, formatEther, type Address, parseUnits, formatUnits } from 'viem'
 import { sepolia } from 'viem/chains'
+import { AddressSelector } from '../../../components/ui'
 
 interface ERC20PermitProps {
   addLog: (message: string) => void
@@ -245,12 +246,10 @@ export default function ERC20Permit({ addLog }: ERC20PermitProps) {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Spender Address
           </label>
-          <input
-            type="text"
+          <AddressSelector
             value={spenderAddress}
-            onChange={(e) => setSpenderAddress(e.target.value)}
-            placeholder="0x..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={setSpenderAddress}
+            placeholder="Select spender address..."
           />
         </div>
         <div>

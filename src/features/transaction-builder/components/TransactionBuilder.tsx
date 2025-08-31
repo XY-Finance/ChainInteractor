@@ -7,7 +7,6 @@ import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { encodeFunctionData, type Address, isAddress } from 'viem'
 import ParameterInput from './ParameterInput'
-// import TransactionPreview from './TransactionPreview'
 import ExampleTransactions from './ExampleTransactions'
 
 export interface Parameter {
@@ -22,8 +21,6 @@ export interface TransactionData {
   functionName: string
   targetAddress: string
   parameters: Parameter[]
-  encodedData?: string
-  txHash?: string
 }
 
 interface ValidationState {
@@ -33,7 +30,7 @@ interface ValidationState {
 }
 
 interface TransactionBuilderProps {
-  addLog: (message: string) => void
+  // No props needed
 }
 
 // Validation functions
@@ -135,7 +132,7 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
   return { isValid: true, message: '' }
 }
 
-const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: TransactionBuilderProps) {
+const TransactionBuilder = React.memo(function TransactionBuilder() {
   const { currentAccount, sendTransaction } = useWalletManager()
 
   const [transactionData, setTransactionData] = useState<TransactionData>({
@@ -146,6 +143,12 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
 
   const [isEncoding, setIsEncoding] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [isCalling, setIsCalling] = useState(false)
+
+  // Local state for displaying results
+  const [encodedData, setEncodedData] = useState<string>('')
+  const [transactionHash, setTransactionHash] = useState<string>('')
+  const [callResult, setCallResult] = useState<string>('')
 
   // Validation state
   const validationState = useMemo((): ValidationState => {
@@ -185,9 +188,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       ...prev,
       parameters: [...prev.parameters, newParameter]
     }))
-
-    addLog('➕ Added new parameter field')
-  }, [addLog])
+  }, [])
 
   // Add a new tuple component (recursive function to handle nested tuples)
   const addTupleComponent = useCallback((parameterId: string) => {
@@ -271,9 +272,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
         return p
       }).filter(Boolean) as Parameter[] // Remove null values
     }))
-
-    addLog('➖ Removed parameter field')
-  }, [addLog])
+  }, [])
 
   // Update parameter (recursive function to handle tuple components at any depth)
   const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
@@ -357,9 +356,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       targetAddress: example.targetAddress,
       parameters
     })
-
-    addLog(`📋 Loaded example: ${example.name}`)
-  }, [addLog])
+  }, [])
 
   // Encode function data
   const encodeData = useCallback(async () => {
@@ -367,12 +364,10 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
     console.log('Current transactionData:', transactionData)
 
     if (!isAllValid) {
-      addLog('❌ Please fix all validation errors before encoding')
       return
     }
 
     setIsEncoding(true)
-    addLog('🔧 Encoding function data...')
 
     try {
       // Recursive function to build ABI inputs with tuple support
@@ -482,64 +477,78 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       })
       console.log('encodedData', encodedData)
 
-      setTransactionData(prev => ({
-        ...prev,
-        encodedData
-      }))
-
-      addLog(`✅ Function encoded successfully: ${encodedData}`)
+      setEncodedData(encodedData)
     } catch (error) {
       console.error('Encoding error:', error)
-      addLog(`❌ Failed to encode function: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setIsEncoding(false)
     }
-  }, [transactionData, addLog])
+  }, [transactionData, isAllValid])
 
   // Send transaction
   const sendTransactionData = useCallback(async () => {
     if (!currentAccount) {
-      addLog('❌ No wallet connected')
       return
     }
 
-    if (!transactionData.encodedData) {
-      addLog('❌ Please encode the function data first')
+    if (!encodedData) {
       return
     }
 
     if (!transactionData.targetAddress.trim()) {
-      addLog('❌ Target contract address is required')
       return
     }
 
     setIsSending(true)
-    addLog('📤 Sending transaction...')
 
     try {
       // Create transaction object
       const tx = {
         to: transactionData.targetAddress as `0x${string}`,
-        data: transactionData.encodedData,
+        data: encodedData,
         value: 0n
       }
 
       const txHash = await sendTransaction(tx)
 
-      setTransactionData(prev => ({
-        ...prev,
-        txHash
-      }))
-
-      addLog(`✅ Transaction sent successfully: ${txHash}`)
+      setTransactionHash(txHash)
     } catch (error) {
-      addLog(`❌ Failed to send transaction: ${error}`)
+      console.error('Transaction error:', error)
     } finally {
       setIsSending(false)
     }
-  }, [currentAccount, transactionData.encodedData, transactionData.targetAddress, sendTransaction, addLog])
+  }, [currentAccount, encodedData, transactionData.targetAddress, sendTransaction])
 
+  // Eth call function
+  const callTransaction = useCallback(async () => {
+    if (!encodedData) {
+      return
+    }
 
+    if (!transactionData.targetAddress.trim()) {
+      return
+    }
+
+    setIsCalling(true)
+
+    try {
+      // Create call object
+      const callData = {
+        to: transactionData.targetAddress as `0x${string}`,
+        data: encodedData,
+        value: 0n
+      }
+
+      // TODO: Implement actual eth_call using wallet provider
+      // For now, we'll simulate a call result
+      const result = `0x0000000000000000000000000000000000000000000000000000000000000001` // Mock result
+      setCallResult(result)
+    } catch (error) {
+      setCallResult(`Error: ${error}`)
+    } finally {
+      setIsCalling(false)
+    }
+  }, [encodedData, transactionData.targetAddress])
 
   return (
     <div className="space-y-6">
@@ -641,9 +650,10 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
       </Card>
 
       {/* Action Buttons */}
-      <Card title="Transaction Actions" subtitle="Encode and send your transaction">
+      <Card title="Transaction Actions" subtitle="Encode and execute your transaction">
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4">
+          {/* Encode Button with Result */}
+          <div className="space-y-2">
             <Button
               onClick={encodeData}
               loading={isEncoding}
@@ -652,59 +662,77 @@ const TransactionBuilder = React.memo(function TransactionBuilder({ addLog }: Tr
             >
               🔧 Encode Data {!isAllValid ? '(Fix validation errors)' : ''}
             </Button>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="targetAddress" className="block text-sm font-medium text-gray-700 mb-2">
-                  Target Contract Address
-                </label>
-                <AddressSelector
-                  value={transactionData.targetAddress}
-                  onChange={updateTargetAddress}
-                  placeholder="Select contract address..."
-                  className={transactionData.targetAddress.trim()
-                    ? validationState.targetAddress.isValid
-                      ? 'border-green-300 focus:ring-green-500'
-                      : 'border-red-300 focus:ring-red-500'
-                    : ''
-                  }
-                />
-                {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
-                  <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
-                )}
+            {encodedData && (
+              <div className="bg-gray-100 p-3 rounded-md">
+                <div className="text-sm font-medium text-gray-700 mb-1">Encoded Data:</div>
+                <div className="text-xs font-mono text-gray-600 break-all">{encodedData}</div>
               </div>
+            )}
+          </div>
 
-              <div className="flex items-end">
-                <Button
-                  onClick={sendTransactionData}
-                  loading={isSending}
-                  disabled={!transactionData.encodedData || !currentAccount || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
-                  variant="success"
-                  className="w-full"
-                >
-                  📤 Send Transaction
-                </Button>
-              </div>
+          {/* Target Address */}
+          <div>
+            <label htmlFor="targetAddress" className="block text-sm font-medium text-gray-700 mb-2">
+              Target Contract Address
+            </label>
+            <AddressSelector
+              value={transactionData.targetAddress}
+              onChange={updateTargetAddress}
+              placeholder="Select contract address..."
+              className={transactionData.targetAddress.trim()
+                ? validationState.targetAddress.isValid
+                  ? 'border-green-300 focus:ring-green-500'
+                  : 'border-red-300 focus:ring-red-500'
+                : ''
+              }
+            />
+            {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
+              <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
+            )}
+          </div>
+
+          {/* Eth Call and Send Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Eth Call */}
+            <div className="space-y-2">
+              <Button
+                onClick={callTransaction}
+                loading={isCalling}
+                disabled={!encodedData || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                variant="outline"
+                className="w-full"
+              >
+                🔗 Eth Call
+              </Button>
+              {callResult && (
+                <div className="bg-blue-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-blue-700 mb-1">Call Result:</div>
+                  <div className="text-xs font-mono text-blue-600 break-all">{callResult}</div>
+                </div>
+              )}
             </div>
 
-            <Button
-              onClick={() => {
-                console.log('Test button clicked!')
-                addLog('🧪 Test button clicked!')
-              }}
-              variant="outline"
-              className="w-full"
-            >
-              🧪 Test Button
-            </Button>
+            {/* Eth Send */}
+            <div className="space-y-2">
+              <Button
+                onClick={sendTransactionData}
+                loading={isSending}
+                disabled={!encodedData || !currentAccount || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                variant="success"
+                className="w-full"
+              >
+                📤 Eth Send
+              </Button>
+              {transactionHash && (
+                <div className="bg-green-50 p-3 rounded-md">
+                  <div className="text-sm font-medium text-green-700 mb-1">Transaction Hash:</div>
+                  <div className="text-xs font-mono text-green-600 break-all">{transactionHash}</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </Card>
-
-      {/* Transaction Preview */}
-      {(transactionData.encodedData || transactionData.txHash) && (
-        <div>Transaction Preview (temporarily disabled)</div>
-      )}
 
       {/* Example Transactions */}
       <ExampleTransactions onLoadExample={loadExample} />
