@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 interface PortfolioData {
   time: string
   value: number
+  ts?: number
 }
 
 interface TokenBalance {
@@ -230,7 +231,8 @@ function processPnlData(pnlData: any, timeRange: string = 'day', aggregation: st
             
             return {
               time: timeString,
-              value: parseFloat(value)
+              value: parseFloat(value),
+              ts: timestamp
             }
           })
         }
