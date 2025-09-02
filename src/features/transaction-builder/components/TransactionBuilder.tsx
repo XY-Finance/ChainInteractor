@@ -133,7 +133,7 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
 }
 
 const TransactionBuilder = React.memo(function TransactionBuilder() {
-  const { currentAccount, sendTransaction } = useWalletManager()
+  const { currentAccount, sendTransaction, publicClient } = useWalletManager()
 
   const [transactionData, setTransactionData] = useState<TransactionData>({
     functionName: '',
@@ -144,11 +144,12 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   const [isEncoding, setIsEncoding] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isCalling, setIsCalling] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
 
   // Local state for displaying results
   const [encodedData, setEncodedData] = useState<string>('')
   const [transactionHash, setTransactionHash] = useState<string>('')
-  const [callResult, setCallResult] = useState<string>('')
+  const [callResult, setCallResult] = useState<{ success: boolean; data: string; message: string } | null>(null)
 
   // Validation state
   const validationState = useMemo((): ValidationState => {
@@ -174,6 +175,51 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
     return functionNameValid && allParametersValid
   }, [validationState])
+
+  // Copy to clipboard function
+  const copyToClipboard = useCallback(async (text: string) => {
+    setIsCopying(true)
+    try {
+      await navigator.clipboard.writeText(text)
+      // You could add a toast notification here
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+    } finally {
+      setIsCopying(false)
+    }
+  }, [])
+
+  // Get block explorer URL
+  const getBlockExplorerUrl = useCallback((hash: string) => {
+    if (!publicClient) {
+      return `https://etherscan.io/tx/${hash}` // fallback to mainnet
+    }
+
+    const chainId = publicClient.chain?.id
+    let baseUrl = 'https://etherscan.io/tx/' // default to mainnet
+
+    switch (chainId) {
+      case 1: // mainnet
+        baseUrl = 'https://etherscan.io/tx/'
+        break
+      case 11155111: // sepolia
+        baseUrl = 'https://sepolia.etherscan.io/tx/'
+        break
+      case 5: // goerli
+        baseUrl = 'https://goerli.etherscan.io/tx/'
+        break
+      case 137: // polygon
+        baseUrl = 'https://polygonscan.com/tx/'
+        break
+      case 80001: // mumbai
+        baseUrl = 'https://mumbai.polygonscan.com/tx/'
+        break
+      default:
+        baseUrl = 'https://etherscan.io/tx/'
+    }
+
+    return `${baseUrl}${hash}`
+  }, [publicClient])
 
   // Add a new parameter
   const addParameter = useCallback(() => {
@@ -529,26 +575,65 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
+    if (!publicClient) {
+      setCallResult({
+        success: false,
+        data: '',
+        message: 'No wallet connected or public client not available'
+      })
+      return
+    }
+
     setIsCalling(true)
 
     try {
       // Create call object
       const callData = {
         to: transactionData.targetAddress as `0x${string}`,
-        data: encodedData,
+        data: encodedData as `0x${string}`,
         value: 0n
       }
 
-      // TODO: Implement actual eth_call using wallet provider
-      // For now, we'll simulate a call result
-      const result = `0x0000000000000000000000000000000000000000000000000000000000000001` // Mock result
-      setCallResult(result)
+      // Perform actual eth_call
+      const result = await publicClient.call(callData)
+
+      setCallResult({
+        success: true,
+        data: result.data || '0x',
+        message: 'Call executed successfully'
+      })
     } catch (error) {
-      setCallResult(`Error: ${error}`)
+      // Handle different types of errors
+      let errorMessage = 'Call failed'
+
+      if (error instanceof Error) {
+        // Check for revert reasons in the error message
+        if (error.message.includes('execution reverted')) {
+          // Try to extract revert reason
+          const revertMatch = error.message.match(/execution reverted: (.+)/)
+          if (revertMatch) {
+            errorMessage = `Reverted: ${revertMatch[1]}`
+          } else {
+            errorMessage = 'Transaction reverted'
+          }
+        } else if (error.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient funds for gas'
+        } else if (error.message.includes('nonce')) {
+          errorMessage = 'Invalid nonce'
+        } else {
+          errorMessage = error.message
+        }
+      }
+
+      setCallResult({
+        success: false,
+        data: '',
+        message: errorMessage
+      })
     } finally {
       setIsCalling(false)
     }
-  }, [encodedData, transactionData.targetAddress])
+  }, [encodedData, transactionData.targetAddress, publicClient])
 
   return (
     <div className="space-y-6">
@@ -650,7 +735,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       </Card>
 
       {/* Action Buttons */}
-      <Card title="Transaction Actions" subtitle="Encode and execute your transaction">
+      <Card title="Transaction Actions" subtitle={`Encode and execute your transaction${publicClient?.chain?.name ? ` on ${publicClient.chain.name}` : ''}`}>
         <div className="space-y-4">
           {/* Encode Button with Result */}
           <div className="space-y-2">
@@ -664,7 +749,18 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             </Button>
             {encodedData && (
               <div className="bg-gray-100 p-3 rounded-md">
-                <div className="text-sm font-medium text-gray-700 mb-1">Encoded Data:</div>
+                <div className="flex justify-between items-center mb-1">
+                  <div className="text-sm font-medium text-gray-700">Encoded Data:</div>
+                  <Button
+                    onClick={() => copyToClipboard(encodedData)}
+                    loading={isCopying}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    📋 Copy
+                  </Button>
+                </div>
                 <div className="text-xs font-mono text-gray-600 break-all">{encodedData}</div>
               </div>
             )}
@@ -705,9 +801,13 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                 🔗 Eth Call
               </Button>
               {callResult && (
-                <div className="bg-blue-50 p-3 rounded-md">
-                  <div className="text-sm font-medium text-blue-700 mb-1">Call Result:</div>
-                  <div className="text-xs font-mono text-blue-600 break-all">{callResult}</div>
+                <div className={`p-3 rounded-md ${callResult.success ? 'bg-blue-50' : 'bg-red-50'}`}>
+                  <div className={`text-sm font-medium mb-1 ${callResult.success ? 'text-blue-700' : 'text-red-700'}`}>
+                    {callResult.success ? 'Call Result:' : 'Call Failed:'}
+                  </div>
+                  <div className={`text-xs font-mono break-all ${callResult.success ? 'text-blue-600' : 'text-red-600'}`}>
+                    {callResult.success ? callResult.data : callResult.message}
+                  </div>
                 </div>
               )}
             </div>
@@ -725,8 +825,27 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               </Button>
               {transactionHash && (
                 <div className="bg-green-50 p-3 rounded-md">
-                  <div className="text-sm font-medium text-green-700 mb-1">Transaction Hash:</div>
-                  <div className="text-xs font-mono text-green-600 break-all">{transactionHash}</div>
+                  <div className="flex justify-between items-center mb-1">
+                    <div className="text-sm font-medium text-green-700">Transaction Hash:</div>
+                    <Button
+                      onClick={() => copyToClipboard(transactionHash)}
+                      loading={isCopying}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                    >
+                      📋 Copy
+                    </Button>
+                  </div>
+                  <div className="text-xs font-mono text-green-600 break-all mb-2">{transactionHash}</div>
+                  <a
+                    href={getBlockExplorerUrl(transactionHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-green-600 hover:text-green-800 underline"
+                  >
+                    🔍 View on Block Explorer
+                  </a>
                 </div>
               )}
             </div>
