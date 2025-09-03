@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { HyperCard, PositionDetails, PnLChart } from './components'
+import { useState, useEffect, useMemo } from 'react'
+import { HyperCard, PositionDetails, PnLChart, CopyTradingModal } from './components'
 import { AccountData, PositionDetailsData } from './types'
 import { useWalletManager } from '@/hooks/useWalletManager'
 import { useHyperliquidData } from './hooks/useHyperliquidData'
@@ -21,20 +21,21 @@ export default function HyperIntentPage() {
   ]
   
   const [currentPlaceholderIndex, setCurrentPlaceholderIndex] = useState(0)
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
+  
+  const REPEAT = 100
+  const repeatedPlaceholders = useMemo(
+    () => Array.from({ length: REPEAT }).flatMap(() => placeholderTexts),
+    [placeholderTexts]
+  )
+  const maxIndex = placeholderTexts.length * REPEAT
   
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentPlaceholderIndex((prevIndex) => {
-        if (prevIndex >= placeholderTexts.length - 1) {
-          const extendedTexts = [...placeholderTexts, ...placeholderTexts]
-          return prevIndex + 1
-        }
-        return prevIndex + 1
-      })
+      setCurrentPlaceholderIndex((prev) => (prev + 1) % maxIndex)
     }, 3000)
-    
     return () => clearInterval(interval)
-  }, [placeholderTexts.length])
+  }, [maxIndex])
 
   const positionDetailsData: PositionDetailsData = {
     totalValue: 21147.09,
@@ -126,11 +127,11 @@ export default function HyperIntentPage() {
                   <div 
                     className="transition-transform duration-700 ease-in-out"
                     style={{
-                      transform: `translateY(-${currentPlaceholderIndex * 20}px)`
+                      transform: `translateY(-${(currentPlaceholderIndex % maxIndex) * 20}px)`
                     }}
                   >
                     {/* Generate looping text */}
-                    {[...placeholderTexts, ...placeholderTexts, ...placeholderTexts].map((text, index) => (
+                    {repeatedPlaceholders.map((text, index) => (
                       <div 
                         key={index} 
                         className="h-5 flex items-center text-white/60 text-sm"
@@ -198,7 +199,7 @@ export default function HyperIntentPage() {
           </div>
           
           {/* Copy Trading Button */}
-          <button className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm">
+          <button onClick={() => setIsCopyModalOpen(true)} className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm">
             {/* Network/Sharing Icon */}
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
@@ -249,6 +250,7 @@ export default function HyperIntentPage() {
           {/* <PositionDetails {...positionDetailsData} /> */}
           <PnLChart userAddress={userAddress} />
         </div>
+        <CopyTradingModal isOpen={isCopyModalOpen} onClose={() => setIsCopyModalOpen(false)} />
       </div>
     </div>
   )
