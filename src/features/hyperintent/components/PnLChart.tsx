@@ -44,7 +44,7 @@ export function PnLChart({
   const svgWidth = 2000
   const svgHeight = 520
   const yTop = 30
-  const leftMargin = 120
+  const leftMargin = 150
   const rightMargin = 40
   const bottomMargin = 50
   const plotWidth = svgWidth - leftMargin - rightMargin

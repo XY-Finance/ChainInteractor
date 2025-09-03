@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { HyperCard, PositionDetails, PnLChart, CopyTradingModal } from './components'
+import { HyperCard, PositionDetails, PnLChart, CopyTradingModal, PositionsTabs } from './components'
 import { AccountData, PositionDetailsData } from './types'
 import { useWalletManager } from '@/hooks/useWalletManager'
 import { useHyperliquidData } from './hooks/useHyperliquidData'
@@ -249,6 +249,7 @@ export default function HyperIntentPage() {
         <div className="grid grid-cols-1 gap-6">
           {/* <PositionDetails {...positionDetailsData} /> */}
           <PnLChart userAddress={userAddress} />
+          <PositionsTabs assetPositions={clearinghouseState?.assetPositions ?? []} />
         </div>
         <CopyTradingModal isOpen={isCopyModalOpen} onClose={() => setIsCopyModalOpen(false)} />
       </div>
