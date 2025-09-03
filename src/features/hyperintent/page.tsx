@@ -251,7 +251,7 @@ export default function HyperIntentPage() {
           <PnLChart userAddress={userAddress} />
           <PositionsTabs assetPositions={clearinghouseState?.assetPositions ?? []} />
         </div>
-        <CopyTradingModal isOpen={isCopyModalOpen} onClose={() => setIsCopyModalOpen(false)} />
+        <CopyTradingModal isOpen={isCopyModalOpen} onClose={() => setIsCopyModalOpen(false)} userAddress={userAddress} clearinghouseState={clearinghouseState} />
       </div>
     </div>
   )
