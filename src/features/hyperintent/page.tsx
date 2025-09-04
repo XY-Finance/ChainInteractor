@@ -199,13 +199,23 @@ export default function HyperIntentPage() {
           </div>
           
           {/* Copy Trading Button */}
-          <button onClick={() => setIsCopyModalOpen(true)} className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm">
-            {/* Network/Sharing Icon */}
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
-            </svg>
-            <span>Copy Trading</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm cursor-not-allowed">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3a6 6 0 00-6 6c0 1.97.92 3.46 2.04 4.64.6.63 1.21 1.27 1.56 1.99h4.8c.35-.72.96-1.36 1.56-1.99C17.08 12.46 18 10.97 18 9a6 6 0 00-6-6z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 18h6M10 21h4" />
+              </svg>
+              <span>Get Insight</span>
+            </button>
+
+            <button onClick={() => setIsCopyModalOpen(true)} className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm">
+              {/* Network/Sharing Icon */}
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+              </svg>
+              <span>Copy Trading</span>
+            </button>
+          </div>
         </div>
         
         {/* Top Section - Financial Cards */}
