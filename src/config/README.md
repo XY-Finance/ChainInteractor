@@ -49,7 +49,7 @@ import { addresses } from '../config/addresses'
 
 // Access addresses
 const usdcAddress = addresses.token.USDC
-const zeroAddress = addresses.common.zero
+const zeroAddress = addresses.eoa.zero
 const metamaskDelegatee = addresses.delegatee.metamask
 const kernelDelegatee = addresses.delegatee.kernel
 ```

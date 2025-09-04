@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { addresses } from '../../../config/addresses'
+import { AddressSelector } from '../../../components/ui'
 import { sepolia } from 'viem/chains'
 import { parseEther } from 'viem'
 import { DelegateeContract } from '../types/eip7702'
@@ -42,7 +43,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCheckingDelegation, setIsCheckingDelegation] = useState(false)
 
-    // Check current delegation on mount only - memoized to prevent unnecessary re-runs
+  // Check current delegation on mount only - memoized to prevent unnecessary re-runs
   const logDelegationStatus = useCallback(() => {
     if (address) {
       console.log(`🔍 Current delegation status: ${currentDelegation || 'Not delegated'}`)
@@ -56,30 +57,30 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
 
   // Available delegatee contracts (imported from centralized config)
 
-    // Memoized filtered delegatees to prevent unnecessary recalculations
-    const filteredDelegatees = useMemo(() => {
-      if (!address) return DELEGATEE_CONTRACTS
+  // Memoized filtered delegatees to prevent unnecessary recalculations
+  const filteredDelegatees = useMemo(() => {
+    if (!address) return DELEGATEE_CONTRACTS
 
-      try {
-        // Get current delegation status
-        const currentDelegationStatus = currentDelegation || addresses.common.zero
+    try {
+      // Get current delegation status
+      const currentDelegationStatus = currentDelegation || addresses.eoa.zero
 
-        // Filter delegatees based on current delegation
-        const availableDelegatees = filterCurrentDelegatee(currentDelegationStatus, DELEGATEE_CONTRACTS)
+      // Filter delegatees based on current delegation
+      const availableDelegatees = filterCurrentDelegatee(currentDelegationStatus, DELEGATEE_CONTRACTS)
 
-        return availableDelegatees
-      } catch (error) {
-        console.error('Error filtering delegatees:', error)
-        return DELEGATEE_CONTRACTS
-      }
-        }, [address, currentDelegation, filterCurrentDelegatee])
+      return availableDelegatees
+    } catch (error) {
+      console.error('Error filtering delegatees:', error)
+      return DELEGATEE_CONTRACTS
+    }
+  }, [address, currentDelegation, filterCurrentDelegatee])
 
-    // Memoized delegatee options with reasons to prevent unnecessary recalculations
-    const delegateeOptionsWithReasons = useMemo(() => {
-      return getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS)
-    }, [currentDelegation, getDelegateeOptionsWithReasons])
+  // Memoized delegatee options with reasons to prevent unnecessary recalculations
+  const delegateeOptionsWithReasons = useMemo(() => {
+    return getDelegateeOptionsWithReasons(currentDelegation || addresses.eoa.zero, DELEGATEE_CONTRACTS)
+  }, [currentDelegation, getDelegateeOptionsWithReasons])
 
-    const createSmartAccountAction = async () => {
+  const createSmartAccountAction = async () => {
     if (!address) {
       addLog('❌ Please connect your wallet first')
       return
@@ -132,7 +133,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
       return
     }
 
-    const isRevocation = selectedContract.address === addresses.common.zero
+    const isRevocation = selectedContract.address === addresses.eoa.zero
     setIsAuthorizing(true)
     addLog(`🔐 Starting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
@@ -171,7 +172,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
       return
     }
 
-    const isRevocation = authorizationHash.contractAddress === addresses.common.zero
+    const isRevocation = authorizationHash.contractAddress === addresses.eoa.zero
     setIsSigning(true)
     addLog(`✍️ Creating EIP-7702 ${isRevocation ? 'revocation' : 'authorization'}...`)
 
@@ -214,7 +215,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
       return
     }
 
-    const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === addresses.common.zero
+    const isRevocation = typeof signedAuthorization === 'object' && signedAuthorization.contractAddress === addresses.eoa.zero
     setIsSubmitting(true)
     addLog(`📤 Submitting EIP-7702 ${isRevocation ? 'revocation' : 'authorization'} to blockchain...`)
 
@@ -245,7 +246,7 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
                 addLog(`🔄 Refreshing delegation status...`)
                 await checkCurrentDelegation()
                 addLog(`📋 Current delegation: ${currentDelegation || 'Not delegated'}`)
-                const options = getDelegateeOptionsWithReasons(currentDelegation || addresses.common.zero, DELEGATEE_CONTRACTS)
+                const options = getDelegateeOptionsWithReasons(currentDelegation || addresses.eoa.zero, DELEGATEE_CONTRACTS)
                 console.log('getDelegateeOptionsWithReasons result:', options)
                 addLog(`📋 Available delegatees: ${options.length}`)
                 options.forEach(delegatee => {
@@ -267,13 +268,12 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
           {delegateeOptionsWithReasons.map((contract) => (
             <div
               key={contract.address}
-              className={`p-4 border rounded-lg transition-colors ${
-                !contract.isSupported
+              className={`p-4 border rounded-lg transition-colors ${!contract.isSupported
                   ? 'border-gray-300 bg-gray-50 cursor-not-allowed opacity-60'
                   : selectedContract?.address === contract.address
-                  ? 'border-orange-500 bg-orange-50 cursor-pointer'
-                  : 'border-gray-200 hover:border-gray-300 cursor-pointer'
-              }`}
+                    ? 'border-orange-500 bg-orange-50 cursor-pointer'
+                    : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                }`}
               onClick={() => contract.isSupported && setSelectedContract(contract)}
             >
               <div className="text-center">
@@ -447,12 +447,10 @@ const EIP7702Authorization = React.memo(function EIP7702Authorization({ addLog }
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Recipient Address
                   </label>
-                  <input
-                    type="text"
+                  <AddressSelector
                     value={recipientAddress}
-                    onChange={(e) => setRecipientAddress(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    onChange={setRecipientAddress}
+                    placeholder="Select recipient address..."
                   />
                 </div>
                 <div>
