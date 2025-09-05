@@ -5,6 +5,7 @@ import { HyperCard, PositionDetails, PnLChart, CopyTradingModal, PositionsTabs }
 import { AccountData, PositionDetailsData } from './types'
 import { useWalletManager } from '@/hooks/useWalletManager'
 import { useHyperliquidData } from './hooks/useHyperliquidData'
+import TraderSelector from '@/components/ui/TraderSelector'
 
 export default function HyperIntentPage() {
   const { address: connectedAddress, isConnected } = useWalletManager()
@@ -22,7 +23,6 @@ export default function HyperIntentPage() {
   
   const [currentPlaceholderIndex, setCurrentPlaceholderIndex] = useState(0)
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
-  
   const REPEAT = 100
   const repeatedPlaceholders = useMemo(
     () => Array.from({ length: REPEAT }).flatMap(() => placeholderTexts),
@@ -90,70 +90,22 @@ export default function HyperIntentPage() {
           <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-500 to-yellow-400 bg-clip-text text-transparent animate-gradient bg-[length:200%_200%]">HyperIntent Dashboard</h1>
           
           {/* Search Address Input */}
-          <div className="relative max-w-md">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder=" "
-                value={inputValue}
-                onChange={(e) => {
-                  setInputValue(e.target.value)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const address = inputValue.trim()
-
-                    // Validate Ethereum address format only on Enter
-                    const ethAddressRegex = /^0x[a-fA-F0-9]{40}$/
-                    const isValid = address === "" || ethAddressRegex.test(address)
-                    setIsValidAddress(isValid)
-                    
-                    // Update searchAddress and userAddress if valid
-                    if (isValid) {
-                      setSearchAddress(address)
-                    }
-                  }
-                }}
-                className={`w-full px-3 py-2 pl-10 bg-white/20 backdrop-blur-sm rounded-full border focus:outline-none focus:ring-2 focus:ring-white/50 text-white placeholder-white/60 text-sm transition-colors duration-200 ${
-                  isValidAddress 
-                    ? 'border-white/30 focus:border-white/50' 
-                    : 'border-red-400/50 focus:border-red-400/70'
-                }`}
-              />
-              
-              {/* Placeholder - Slide scroll effect */}
-              {inputValue === '' && (
-                <div className="absolute left-10 top-1/2 transform -translate-y-1/2 pointer-events-none overflow-hidden h-5">
-                  <div 
-                    className="transition-transform duration-700 ease-in-out"
-                    style={{
-                      transform: `translateY(-${(currentPlaceholderIndex % maxIndex) * 20}px)`
-                    }}
-                  >
-                    {/* Generate looping text */}
-                    {repeatedPlaceholders.map((text, index) => (
-                      <div 
-                        key={index} 
-                        className="h-5 flex items-center text-white/60 text-sm"
-                      >
-                        {text}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Search Icon */}
-              <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                <svg className="w-4 h-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-            {/* Error Message */}
-            {!isValidAddress && (
-              <p className="text-red-400 text-xs mt-1 ml-3">Please enter a valid Ethereum address</p>
-              )}
+          <div className="max-w-md">
+            <TraderSelector
+              value={inputValue}
+              onChange={(addr) => {
+                setInputValue(addr)
+                const valid = addr === '' || /^0x[a-fA-F0-9]{40}$/.test(addr)
+                setIsValidAddress(valid)
+                if (valid) setSearchAddress(addr)
+              }}
+              defaultValue={connectedAddress as string}
+            />
           </div>
+          {/* Error Message */}
+          {!isValidAddress && (
+            <p className="text-red-400 text-xs mt-1 ml-3">Please enter a valid Ethereum address</p>
+          )}
         </div>
         
         {/* Wallet Address Section with Copy Trading Button */}
