@@ -54,6 +54,10 @@ const validateAddress = (address: string): { isValid: boolean; message: string }
   return { isValid: true, message: '' }
 }
 
+// Helper functions for structured types (arrays and tuples)
+const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
+const getBaseType = (type: string): string => type.replace(/\[\]/g, '')
+
 const validateParameter = (parameter: Parameter): { isValid: boolean; message: string } => {
   if (!parameter.value.trim()) {
     return { isValid: false, message: 'Parameter value is required' }
@@ -61,7 +65,53 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
 
   // Type-specific validation
   const value = parameter.value.trim()
+
+  // Handle all types in a unified switch statement
   switch (parameter.type) {
+    // Handle structured types (arrays and tuples) - treat them identically
+    default:
+      if (isStructuredType(parameter.type)) {
+        try {
+          const structuredValue = JSON.parse(value)
+
+          // For arrays, expect an array; for tuples, expect an object
+          if (parameter.type === 'array') {
+            if (!Array.isArray(structuredValue)) {
+              return { isValid: false, message: 'Must be a JSON array' }
+            }
+          } else {
+            if (typeof structuredValue !== 'object' || Array.isArray(structuredValue)) {
+              return { isValid: false, message: 'Must be a JSON object' }
+            }
+          }
+
+          // Validate each component/element
+          if (parameter.components && parameter.components.length > 0) {
+            for (let i = 0; i < parameter.components.length; i++) {
+              const component = parameter.components[i]
+              const componentValue = parameter.type === 'array'
+                ? structuredValue[i]
+                : structuredValue[component.name]
+
+              if (componentValue === undefined) {
+                return { isValid: false, message: `Missing ${parameter.type === 'array' ? 'element' : 'component'}: ${component.name}` }
+              }
+
+              const componentValidation = validateParameter({
+                ...component,
+                value: String(componentValue)
+              })
+              if (!componentValidation.isValid) {
+                return { isValid: false, message: `Invalid ${component.name}: ${componentValidation.message}` }
+              }
+            }
+          }
+        } catch (error) {
+          return { isValid: false, message: `Invalid JSON format for ${parameter.type === 'array' ? 'array' : 'tuple'}` }
+        }
+        return { isValid: true, message: '' }
+      }
+      break
     case 'address':
       if (!isAddress(value)) {
         return { isValid: false, message: 'Invalid address format' }
@@ -236,7 +286,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     }))
   }, [])
 
-  // Add a new tuple component (recursive function to handle nested tuples)
+  // Add a new tuple/array component (recursive function to handle nested tuples and arrays)
   const addTupleComponent = useCallback((parameterId: string) => {
     setTransactionData(prev => ({
       ...prev,
@@ -274,6 +324,39 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                 return { ...comp, components: addComponentsRecursive(comp.components) }
               }
 
+              if (isStructuredType(comp.type) && comp.components) {
+                return { ...comp, components: addComponentsRecursive(comp.components) }
+              }
+
+              return comp
+            })
+          }
+
+          return { ...param, components: addComponentsRecursive(param.components) }
+        }
+
+        // If this parameter has array components, search recursively
+        if (isStructuredType(param.type) && param.components) {
+          const addComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.map(comp => {
+              if (comp.id === parameterId) {
+                const newComponent: Parameter = {
+                  id: Date.now().toString() + Math.random(),
+                  name: '',
+                  type: 'address',
+                  value: ''
+                }
+                return { ...comp, components: [...(comp.components || []), newComponent] }
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: addComponentsRecursive(comp.components) }
+              }
+
+              if (isStructuredType(comp.type) && comp.components) {
+                return { ...comp, components: addComponentsRecursive(comp.components) }
+              }
+
               return comp
             })
           }
@@ -286,7 +369,31 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     }))
   }, [])
 
-  // Remove a parameter (recursive function to handle tuple components at any depth)
+  // Add a new array element (for array types)
+  const addArrayElement = useCallback((parameterId: string) => {
+    setTransactionData(prev => ({
+      ...prev,
+      parameters: prev.parameters.map(param => {
+        if (param.id === parameterId && param.type.endsWith('[]')) {
+          const baseType = param.type.slice(0, -2) // Remove '[]' suffix
+          const newElement: Parameter = {
+            id: Date.now().toString() + Math.random(),
+            name: `element_${(param.components || []).length}`,
+            type: baseType,
+            value: ''
+          }
+          const updatedComponents = [...(param.components || []), newElement]
+          return {
+            ...param,
+            components: updatedComponents
+          }
+        }
+        return param
+      })
+    }))
+  }, [])
+
+  // Remove a parameter (recursive function to handle tuple and array components at any depth)
   const removeParameter = useCallback((id: string, parentId?: string) => {
     setTransactionData(prev => ({
       ...prev,
@@ -305,6 +412,33 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               }
 
               if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: removeComponentsRecursive(comp.components) }
+              }
+
+              if (isStructuredType(comp.type) && comp.components) {
+                return { ...comp, components: removeComponentsRecursive(comp.components) }
+              }
+
+              return true
+            })
+          }
+
+          return { ...p, components: removeComponentsRecursive(p.components) }
+        }
+
+        // If this parameter has array components, search recursively
+        if (isStructuredType(p.type) && p.components) {
+          const removeComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.filter(comp => {
+              if (comp.id === id) {
+                return false // Remove this component
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: removeComponentsRecursive(comp.components) }
+              }
+
+              if (isStructuredType(comp.type) && comp.components) {
                 return { ...comp, components: removeComponentsRecursive(comp.components) }
               }
 
@@ -337,9 +471,14 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             }
           }
 
-          // Initialize tuple components when type is changed to 'tuple'
-          if (field === 'type' && value === 'tuple' && !p.components) {
+          // Initialize structured components when type is changed to a structured type
+          if (field === 'type' && isStructuredType(value) && !p.components) {
             return { ...p, [field]: value, components: [] }
+          }
+
+          // Clear components when switching from structured to non-structured
+          if (field === 'type' && isStructuredType(p.type) && !isStructuredType(value)) {
+            return { ...p, [field]: value, components: undefined }
           }
 
           return { ...p, [field]: value }
@@ -350,13 +489,43 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
           const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
             return components.map(comp => {
               if (comp.id === id) {
-                if (field === 'type' && value === 'tuple' && !comp.components) {
+                if (field === 'type' && isStructuredType(value) && !comp.components) {
                   return { ...comp, [field]: value, components: [] }
                 }
                 return { ...comp, [field]: value }
               }
 
               if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: updateComponentsRecursive(comp.components) }
+              }
+
+              if (isStructuredType(comp.type) && comp.components) {
+                return { ...comp, components: updateComponentsRecursive(comp.components) }
+              }
+
+              return comp
+            })
+          }
+
+          return { ...p, components: updateComponentsRecursive(p.components) }
+        }
+
+        // If this parameter has array components, search recursively
+        if (isStructuredType(p.type) && p.components) {
+          const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
+            return components.map(comp => {
+              if (comp.id === id) {
+                if (field === 'type' && isStructuredType(value) && !comp.components) {
+                  return { ...comp, [field]: value, components: [] }
+                }
+                return { ...comp, [field]: value }
+              }
+
+              if (comp.type === 'tuple' && comp.components) {
+                return { ...comp, components: updateComponentsRecursive(comp.components) }
+              }
+
+              if (isStructuredType(comp.type) && comp.components) {
                 return { ...comp, components: updateComponentsRecursive(comp.components) }
               }
 
@@ -444,28 +613,57 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       console.log('ABI item:', abiItem)
       console.log('transactionData', transactionData)
 
-      // Recursive function to encode values with tuple support
+      // Recursive function to encode values with tuple and array support
       const encodeValues = (params: Parameter[]): any[] => {
         return params.map(p => {
           const value = p.value.trim()
 
-          // Handle tuple types
-          if (p.type === 'tuple' && p.components && p.components.length > 0) {
-            // For tuples, we need to parse the JSON value and encode each component
+          // Handle structured types (arrays and tuples) - treat them identically
+          if (isStructuredType(p.type)) {
             try {
-              const tupleValue = JSON.parse(value)
-              const encodedTuple: any[] = encodeValues(p.components).map((_: any, index: number) => {
-                const componentValue = tupleValue[p.components![index].name]
-                if (componentValue === undefined) {
-                  throw new Error(`Missing component ${p.components![index].name} in tuple ${p.name}`)
+              const structuredValue = JSON.parse(value)
+
+              // For arrays, expect an array; for tuples, expect an object
+              if (p.type === 'array') {
+                if (!Array.isArray(structuredValue)) {
+                  throw new Error(`Expected array for parameter ${p.name}`)
                 }
-                return encodeSingleValue(p.components![index], componentValue)
-              })
-              return encodedTuple
+              } else {
+                if (typeof structuredValue !== 'object' || Array.isArray(structuredValue)) {
+                  throw new Error(`Expected object for parameter ${p.name}`)
+                }
+              }
+
+              // Encode each component/element
+              if (p.components && p.components.length > 0) {
+                if (p.type === 'array') {
+                  // For arrays, encode each element
+                  return structuredValue.map((item: any, index: number) => {
+                    const encodedElement: any[] = encodeValues(p.components!).map((_: any, compIndex: number) => {
+                      const componentValue = item[compIndex]
+                      if (componentValue === undefined) {
+                        throw new Error(`Missing element ${compIndex} in array ${p.name}`)
+                      }
+                      return encodeSingleValue(p.components![compIndex], componentValue)
+                    })
+                    return encodedElement
+                  })
+                } else {
+                  // For tuples, encode as array of values
+                  return encodeValues(p.components).map((_: any, compIndex: number) => {
+                    const componentValue = structuredValue[p.components![compIndex].name]
+                    if (componentValue === undefined) {
+                      throw new Error(`Missing component ${p.components![compIndex].name} in tuple ${p.name}`)
+                    }
+                    return encodeSingleValue(p.components![compIndex], componentValue)
+                  })
+                }
+              }
             } catch (error) {
-              throw new Error(`Invalid tuple format for parameter ${p.name}: ${error instanceof Error ? error.message : String(error)}`)
+              throw new Error(`Invalid ${p.type === 'array' ? 'array' : 'tuple'} format for parameter ${p.name}: ${error instanceof Error ? error.message : String(error)}`)
             }
           }
+
 
           return encodeSingleValue(p, value)
         })
@@ -699,6 +897,13 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
               // Add tuple components if this is a tuple
               if (param.type === 'tuple' && param.components) {
+                param.components.forEach(component => {
+                  addParameterWithComponents(component, depth + 1, param.id)
+                })
+              }
+
+              // Add array components if this is an array (treat arrays like tuples)
+              if (isStructuredType(param.type) && param.components) {
                 param.components.forEach(component => {
                   addParameterWithComponents(component, depth + 1, param.id)
                 })

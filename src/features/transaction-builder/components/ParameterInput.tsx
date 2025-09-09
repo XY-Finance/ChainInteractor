@@ -52,7 +52,8 @@ const SOLIDITY_TYPES = [
   'bytes4',
   'bytes2',
   'bytes1',
-  'tuple'
+  'tuple',
+  'array'
 ]
 
 const ParameterInput = React.memo(function ParameterInput({
@@ -66,6 +67,14 @@ const ParameterInput = React.memo(function ParameterInput({
   isTupleComponent = false
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && parameter.value.trim()
+
+  // Helper functions for structured types (matching TransactionBuilder)
+  const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
+  const getBaseType = (type: string): string => type.replace(/\[\]/g, '')
+
+  const baseType = getBaseType(parameter.type)
+  const isArray = parameter.type === 'array'
+  const isTuple = parameter.type === 'tuple'
 
   // Dropdown state
   const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false)
@@ -121,7 +130,8 @@ const ParameterInput = React.memo(function ParameterInput({
     valueInputRef.current?.blur()
   }
 
-      // Handle tuple component updates
+
+      // Handle tuple/array component updates
   const handleTupleComponentUpdate = (componentId: string, field: keyof Parameter, value: string) => {
     const currentComponents = parameter.components || []
 
@@ -129,25 +139,30 @@ const ParameterInput = React.memo(function ParameterInput({
       comp.id === componentId ? { ...comp, [field]: value } : comp
     )
 
-    // Reconstruct the tuple value from components
-    const tupleValue: any = {}
-    updatedComponents.forEach(comp => {
-      if (comp.name.trim()) {
-        tupleValue[comp.name] = comp.value
-      }
-    })
-
-    onUpdate('value', JSON.stringify(tupleValue))
+    if (isArray) {
+      // For arrays, reconstruct array value from elements
+      const arrayValue = updatedComponents.map(comp => comp.value)
+      onUpdate('value', JSON.stringify(arrayValue))
+    } else if (isTuple) {
+      // For tuples, reconstruct tuple value from components
+      const tupleValue: any = {}
+      updatedComponents.forEach(comp => {
+        if (comp.name.trim()) {
+          tupleValue[comp.name] = comp.value
+        }
+      })
+      onUpdate('value', JSON.stringify(tupleValue))
+    }
   }
 
 
 
-    // Add tuple component
+    // Add structured component (tuple or array)
   const addTupleComponent = () => {
     const newComponent: Parameter = {
       id: Date.now().toString() + Math.random(),
-      name: '',
-      type: 'address',
+      name: isArray ? `element_${(parameter.components || []).length}` : '',
+      type: isArray ? baseType : 'address',
       value: ''
     }
 
@@ -156,12 +171,28 @@ const ParameterInput = React.memo(function ParameterInput({
     onUpdate('components', JSON.stringify(updatedComponents))
   }
 
-    // Remove tuple component
+
+    // Remove structured component (tuple or array)
   const removeTupleComponent = (componentId: string) => {
     const currentComponents = parameter.components || []
     const updatedComponents = currentComponents.filter(comp => comp.id !== componentId)
     onUpdate('components', JSON.stringify(updatedComponents))
+
+    // Reconstruct the value after removal
+    if (isArray) {
+      const arrayValue = updatedComponents.map(comp => comp.value)
+      onUpdate('value', JSON.stringify(arrayValue))
+    } else if (isTuple) {
+      const tupleValue: any = {}
+      updatedComponents.forEach(comp => {
+        if (comp.name.trim()) {
+          tupleValue[comp.name] = comp.value
+        }
+      })
+      onUpdate('value', JSON.stringify(tupleValue))
+    }
   }
+
 
   // Handle nested tuple component updates
   const handleNestedTupleComponentUpdate = (parentComponentId: string, nestedComponentId: string, field: keyof Parameter, value: string) => {
@@ -324,9 +355,12 @@ const ParameterInput = React.memo(function ParameterInput({
               setIsNameDropdownOpen(filtered.length > 0)
             }}
             placeholder="Name (optional, e.g., to, amount)"
+            readOnly={isTupleComponent && isArray}
             className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
               isInvalid
                 ? 'border-red-300 focus:ring-red-500'
+                : isTupleComponent && isArray
+                ? 'border-gray-200 bg-gray-100 text-gray-600'
                 : 'border-gray-300 focus:ring-blue-500'
             }`}
           />
@@ -351,26 +385,39 @@ const ParameterInput = React.memo(function ParameterInput({
 
         {/* Parameter Type */}
         <div className="md:col-span-2">
-          <select
-            value={parameter.type}
-            onChange={(e) => onUpdate('type', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
-              isInvalid
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
-          >
-            {SOLIDITY_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+          {isTupleComponent && isArray ? (
+            <input
+              type="text"
+              value={parameter.type}
+              readOnly
+              className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-sm text-gray-600"
+            />
+          ) : (
+            <select
+              value={parameter.type}
+              onChange={(e) => {
+                const newType = e.target.value
+                onUpdate('type', newType)
+              }}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+                isInvalid
+                  ? 'border-red-300 focus:ring-red-500'
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            >
+              {SOLIDITY_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
+
 
         {/* Parameter Value */}
         <div className="relative md:col-span-6">
-          {parameter.type === 'bool' ? (
+          {baseType === 'bool' ? (
             <div className="flex items-center justify-center h-10">
               <button
                 type="button"
@@ -391,7 +438,7 @@ const ParameterInput = React.memo(function ParameterInput({
                 {parameter.value === 'true' ? 'true' : 'false'}
               </span>
             </div>
-          ) : parameter.type === 'tuple' ? (
+          ) : baseType === 'tuple' ? (
             <div className="flex items-center justify-center h-10">
               <button
                 onClick={onAddTupleComponent}
@@ -400,7 +447,16 @@ const ParameterInput = React.memo(function ParameterInput({
                 ➕ Add Component
               </button>
             </div>
-          ) : parameter.type === 'address' ? (
+          ) : isArray ? (
+            <div className="flex items-center justify-center h-10">
+              <button
+                onClick={onAddTupleComponent}
+                className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-2 rounded transition-colors border border-green-200"
+              >
+                ➕ Add Element
+              </button>
+            </div>
+          ) : baseType === 'address' ? (
             <AddressSelector
               value={parameter.value}
               onChange={handleValueChange}
@@ -459,6 +515,7 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
       </div>
 
+
       {/* Error message - only show when input is invalid */}
       {isInvalid && (
         <div className="mt-2 text-xs text-red-600">
@@ -508,6 +565,8 @@ function getPlaceholderForType(type: string): string {
       return '0x...'
     case 'tuple':
       return 'Add components below'
+    case 'array':
+      return 'Add elements below'
     default:
       return 'Enter value'
   }
@@ -546,6 +605,8 @@ function getTypeHint(type: string): string {
       return 'Enter hex data (0x followed by hex characters)'
     case 'tuple':
       return 'Add components to define the tuple structure'
+    case 'array':
+      return 'Add elements to define the array structure'
     default:
       return ''
   }
