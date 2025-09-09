@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 import WalletStatus from './components/WalletStatus'
 import UseCaseCard from './components/UseCaseCard'
+import ScrollableGrid from '../../components/ui/ScrollableGrid'
 import EIP7702Authorization from './components/EIP7702Authorization'
 import ERC20Permit from './components/ERC20Permit'
 import OperationLogs from './components/OperationLogs'
@@ -154,7 +155,7 @@ const WalletActionsPage = React.memo(function WalletActionsPage() {
 
           {isActionsExpanded && (
             <div className="px-6 pb-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <ScrollableGrid>
                 {COMMON_USE_CASES.map((useCase) => (
                   <UseCaseCard
                     key={useCase.id}
@@ -165,7 +166,7 @@ const WalletActionsPage = React.memo(function WalletActionsPage() {
                     isLoading={false} // Never show skeleton for action cards
                   />
                 ))}
-              </div>
+              </ScrollableGrid>
             </div>
           )}
         </div>

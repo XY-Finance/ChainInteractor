@@ -3,6 +3,7 @@
 import React from 'react'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
+import ScrollableGrid from '../../../components/ui/ScrollableGrid'
 import { addresses } from '../../../config/addresses'
 
 interface ExampleTransaction {
@@ -130,7 +131,12 @@ const ExampleTransactions = React.memo(function ExampleTransactions({
 }: ExampleTransactionsProps) {
   return (
     <Card title="Example Transactions" subtitle="Try these common transaction types">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <ScrollableGrid
+        gridCols={{
+          default: 'grid-cols-1',
+          md: 'md:grid-cols-2'
+        }}
+      >
         {EXAMPLE_TRANSACTIONS.map((example, index) => (
           <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
             <h4 className="font-medium text-gray-900 mb-2">{example.name}</h4>
@@ -160,7 +166,7 @@ const ExampleTransactions = React.memo(function ExampleTransactions({
             </Button>
           </div>
         ))}
-      </div>
+      </ScrollableGrid>
     </Card>
   )
 })
