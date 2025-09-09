@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
+import TypeSelector from '../../../components/ui/TypeSelector'
 import type { Parameter } from './TransactionBuilder'
 
 interface ParameterInputProps {
@@ -29,32 +30,6 @@ const getRecentValues = (type: string): string[] => {
   return JSON.parse(localStorage.getItem(key) || '[]')
 }
 
-const SOLIDITY_TYPES = [
-  'address',
-  'uint256',
-  'uint128',
-  'uint64',
-  'uint32',
-  'uint16',
-  'uint8',
-  'int256',
-  'int128',
-  'int64',
-  'int32',
-  'int16',
-  'int8',
-  'bool',
-  'string',
-  'bytes',
-  'bytes32',
-  'bytes16',
-  'bytes8',
-  'bytes4',
-  'bytes2',
-  'bytes1',
-  'tuple',
-  'array'
-]
 
 const ParameterInput = React.memo(function ParameterInput({
   parameter,
@@ -393,24 +368,16 @@ const ParameterInput = React.memo(function ParameterInput({
               className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-sm text-gray-600"
             />
           ) : (
-            <select
+            <TypeSelector
               value={parameter.type}
-              onChange={(e) => {
-                const newType = e.target.value
-                onUpdate('type', newType)
-              }}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
+              onChange={(newType) => onUpdate('type', newType)}
+              placeholder="Select type..."
+              className={`text-sm ${
                 isInvalid
                   ? 'border-red-300 focus:ring-red-500'
                   : 'border-gray-300 focus:ring-blue-500'
               }`}
-            >
-              {SOLIDITY_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </div>
 
