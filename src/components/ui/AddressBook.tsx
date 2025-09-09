@@ -3,8 +3,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
-import { matchesSearchTerm, type AddressItem } from '../../utils/addressSearch'
+import { matchesSearchTerm, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
+import HighlightedText from './HighlightedText'
 import AddressSelector from './AddressSelector'
 
 interface AddressBookProps {
@@ -92,7 +93,8 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
           addresses.push({
             path: `${category}.${key}`,
             label: key,
-            address: value
+            address: value,
+            category: category
           })
           allConfigAddresses.add(value.toLowerCase())
         } else if (typeof value === 'object' && value !== null) {
@@ -102,7 +104,8 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
               addresses.push({
                 path: `${category}.${key}.${subKey}`,
                 label: `${key}.${subKey}`,
-                address: subValue
+                address: subValue,
+                category: category
               })
               allConfigAddresses.add(subValue.toLowerCase())
             }
@@ -130,23 +133,33 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
       addresses: recentAddresses.map(addr => ({
         path: `recent.${addr}`,
         label: addr,
-        address: addr
+        address: addr,
+        category: 'recent'
       })),
       count: recentAddresses.length
     })
   }
 
 
-  // Filter addresses based on search term
+  // Get all addresses for highlighting
+  const allAddresses = addressCategories.flatMap(category =>
+    category.addresses.map(addr => ({ ...addr, category: category.category }))
+  )
+
+  // Apply search with highlights
+  const highlightedResults = searchWithHighlights(allAddresses, searchTerm)
+
+  // Filter to only show matching results
+  const filteredResults = highlightedResults.filter(item => matchesSearchTerm(item, searchTerm))
+
+  // Group back into categories for display
   const filteredCategories = addressCategories.map(category => ({
     ...category,
-    addresses: category.addresses.filter(item => matchesSearchTerm(item, searchTerm))
+    addresses: filteredResults.filter(item => item.category === category.category)
   })).filter(category => category.addresses.length > 0)
 
   // Flatten all filtered addresses for keyboard navigation
-  const allFilteredAddresses = filteredCategories.flatMap(category =>
-    category.addresses.map(addr => ({ ...addr, category: category.category }))
-  )
+  const allFilteredAddresses = filteredResults
 
   // Use shared keyboard navigation hook
   const { handleSearchKeyDown } = useKeyboardNavigation({
@@ -262,7 +275,8 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
                       {/* Category Addresses */}
                       {isExpanded && (
                         <div className="bg-white">
-                          {addresses.map(({ path, label, address }, index) => {
+                          {addresses.map((item, index) => {
+                            const { path, label, address } = item
                             const globalIndex = allFilteredAddresses.findIndex(addr => addr.path === path)
                             const isSelected = globalIndex === selectedIndex
                             return (
@@ -275,10 +289,17 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
                               >
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium text-gray-900 truncate">
-                                  {label}
+                                  <HighlightedText
+                                    text={label}
+                                    highlights={(item.highlights as any)?.label || []}
+                                  />
                                 </div>
                                 <div className="text-xs text-gray-500 font-mono truncate">
-                                  {address}
+                                  <HighlightedText
+                                    text={address}
+                                    highlights={(item.highlights as any)?.address || []}
+                                    highlightClassName="bg-yellow-200 font-medium"
+                                  />
                                 </div>
                               </div>
                               <div className="ml-3 flex items-center">

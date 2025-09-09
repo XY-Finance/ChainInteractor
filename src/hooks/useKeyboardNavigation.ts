@@ -32,6 +32,13 @@ export const useKeyboardNavigation = ({
       e.preventDefault()
       const trimmedSearch = searchTerm.trim()
 
+      // If there's only one result, select it automatically
+      if (allFilteredAddresses.length === 1) {
+        const singleAddr = allFilteredAddresses[0]
+        onSelect(singleAddr.address, `${singleAddr.category}.${singleAddr.label}`)
+        return
+      }
+
       // If there's a selected item, select it
       if (selectedIndex >= 0 && selectedIndex < allFilteredAddresses.length) {
         const selectedAddr = allFilteredAddresses[selectedIndex]

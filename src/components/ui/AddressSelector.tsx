@@ -3,8 +3,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
-import { matchesSearchTerm, getSearchScore, fuzzySearchAddresses, type AddressItem } from '../../utils/addressSearch'
+import { matchesSearchTerm, getSearchScore, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
+import HighlightedText from './HighlightedText'
 
 interface AddressSelectorProps {
   value: string
@@ -75,7 +76,8 @@ export default function AddressSelector({
           addresses.push({
             path: `${category}.${key}`,
             label: key,
-            address: value
+            address: value,
+            category: category
           })
           allConfigAddresses.add(value.toLowerCase())
         } else if (typeof value === 'object' && value !== null) {
@@ -85,7 +87,8 @@ export default function AddressSelector({
               addresses.push({
                 path: `${category}.${key}.${subKey}`,
                 label: `${key}.${subKey}`,
-                address: subValue
+                address: subValue,
+                category: category
               })
               allConfigAddresses.add(subValue.toLowerCase())
             }
@@ -113,26 +116,36 @@ export default function AddressSelector({
       addresses: recentAddresses.map(addr => ({
         path: `recent.${addr}`,
         label: addr,
-        address: addr
+        address: addr,
+        category: 'recent'
       })),
       count: recentAddresses.length
     })
   }
 
 
-  // Filter and rank addresses based on enhanced search term
+  // Get all addresses for highlighting
+  const allAddresses = addressCategories.flatMap(category =>
+    category.addresses.map(addr => ({ ...addr, category: category.category }))
+  )
+
+  // Apply search with highlights
+  const highlightedResults = searchWithHighlights(allAddresses, searchTerm)
+
+  // Filter to only show matching results and sort by score
+  const filteredResults = highlightedResults
+    .filter(item => matchesSearchTerm(item, searchTerm))
+    .map(item => ({ ...item, score: getSearchScore(item, searchTerm) }))
+    .sort((a, b) => b.score - a.score) // Sort by relevance score
+
+  // Group back into categories for display
   const filteredCategories = addressCategories.map(category => ({
     ...category,
-    addresses: category.addresses
-      .filter(item => matchesSearchTerm(item, searchTerm))
-      .map(item => ({ ...item, score: getSearchScore(item, searchTerm) }))
-      .sort((a, b) => b.score - a.score) // Sort by relevance score
+    addresses: filteredResults.filter(item => item.category === category.category)
   })).filter(category => category.addresses.length > 0)
 
   // Flatten all filtered addresses for keyboard navigation
-  const allFilteredAddresses = filteredCategories.flatMap(category =>
-    category.addresses.map(addr => ({ ...addr, category: category.category }))
-  )
+  const allFilteredAddresses = filteredResults
 
   const handleSelect = useCallback((address: string) => {
     onChange(address)
@@ -399,7 +412,8 @@ export default function AddressSelector({
                       {/* Category Addresses */}
                       {isExpanded && (
                         <div className="bg-white">
-                          {addresses.map(({ path, label, address }, index) => {
+                          {addresses.map((item, index) => {
+                            const { path, label, address } = item
                             const globalIndex = allFilteredAddresses.findIndex(addr => addr.path === path)
                             const isSelected = globalIndex === selectedIndex
                             return (
@@ -411,8 +425,19 @@ export default function AddressSelector({
                                   value === address ? 'bg-blue-50 text-blue-900' : 'text-gray-900'
                                 } ${isSelected ? 'bg-blue-100 border-blue-300' : ''}`}
                               >
-                                <div className="text-sm font-medium truncate">{label}</div>
-                                <div className="text-xs text-gray-500 font-mono truncate">{address}</div>
+                                <div className="text-sm font-medium truncate">
+                                  <HighlightedText
+                                    text={label}
+                                    highlights={(item.highlights as any)?.label || []}
+                                  />
+                                </div>
+                                <div className="text-xs text-gray-500 font-mono truncate">
+                                  <HighlightedText
+                                    text={address}
+                                    highlights={(item.highlights as any)?.address || []}
+                                    highlightClassName="bg-yellow-200 font-medium"
+                                  />
+                                </div>
                               </button>
                             )
                           })}
