@@ -40,6 +40,17 @@ export const addresses = {
   },
 } as const
 
+// Address configuration for different environments and common addresses
+export const kol = {
+  // KOL addresses
+  kol: {
+    MachiBigBrother: '0x020ca66c30bec2c4fe3861a94e4db4a498a35872' as Address,
+    TheWhiteWhaleHL: '0xb8b9e3097c8b1dddf9c5ea9d48a7ebeaf09d67d2' as Address,
+    JamesWynnReal: '0x8da6beaa2f002a511809101b24d181a324ae82d6' as Address,
+    // Add other tokens as needed
+  },
+} as const
+
 // Type-safe access to addresses
 export type AddressConfig = typeof addresses
 
@@ -72,4 +83,4 @@ export const {
 } = addresses
 
 // Export the main config object
-export default addresses
+export default { addresses, kol }
