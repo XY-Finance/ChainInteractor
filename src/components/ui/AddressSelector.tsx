@@ -6,6 +6,7 @@ import { isAddress } from 'viem'
 import { matchesSearchTerm, getSearchScore, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
+import SearchPreview from './SearchPreview'
 
 interface AddressSelectorProps {
   value: string
@@ -207,10 +208,10 @@ export default function AddressSelector({
     })
   }, [])
 
-  // Reset selected index when search term changes
+  // Set selected index to first result when search term changes
   useEffect(() => {
-    setSelectedIndex(-1)
-  }, [searchTerm])
+    setSelectedIndex(allFilteredAddresses.length > 0 ? 0 : -1)
+  }, [searchTerm, allFilteredAddresses.length])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -260,36 +261,6 @@ export default function AddressSelector({
     ? allFilteredAddresses[selectedIndex].address
     : null
 
-  // Create preview text with greyed out parts
-  const getPreviewText = () => {
-    if (!selectedAddress || !searchTerm.trim()) {
-      return searchTerm
-    }
-
-    const searchLower = searchTerm.toLowerCase()
-    const addressLower = selectedAddress.toLowerCase()
-
-    // Find where the search term matches in the address
-    const matchIndex = addressLower.indexOf(searchLower)
-
-    if (matchIndex === -1) {
-      return searchTerm
-    }
-
-    // Split the address into parts: before match, match, after match
-    const beforeMatch = selectedAddress.substring(0, matchIndex)
-    const match = selectedAddress.substring(matchIndex, matchIndex + searchTerm.length)
-    const afterMatch = selectedAddress.substring(matchIndex + searchTerm.length)
-
-    return (
-      <>
-        <span className="text-gray-400">{beforeMatch}</span>
-        <span className="text-gray-900">{match}</span>
-        <span className="text-gray-400">{afterMatch}</span>
-      </>
-    )
-  }
-
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Trigger Button */}
@@ -335,26 +306,21 @@ export default function AddressSelector({
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
           {/* Search Input */}
-          <div className="p-2 border-b border-gray-200">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Search addresses or type a new address..."
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-transparent relative z-10"
-                autoFocus
-              />
-              {/* Preview overlay */}
-              {selectedAddress && searchTerm.trim() && (
-                <div className="absolute inset-0 px-2 py-1 text-sm pointer-events-none">
-                  <div className="font-mono">
-                    {getPreviewText()}
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="p-2 border-b border-gray-200 relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search addresses or type a new address..."
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              autoFocus
+            />
+            {/* Preview overlay */}
+            <SearchPreview
+              searchTerm={searchTerm}
+              selectedValue={selectedAddress}
+            />
             {isSearchTermValidAddress && filteredCategories.length === 0 && (
               <p className="mt-1 text-xs text-blue-600">
                 Press Enter to add this address

@@ -6,7 +6,7 @@ import { isAddress } from 'viem'
 import { matchesSearchTerm, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
-import AddressSelector from './AddressSelector'
+import SearchPreview from './SearchPreview'
 
 interface AddressBookProps {
   className?: string
@@ -161,6 +161,11 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
   // Flatten all filtered addresses for keyboard navigation
   const allFilteredAddresses = filteredResults
 
+  // Get the selected address for preview
+  const selectedAddress = selectedIndex >= 0 && selectedIndex < allFilteredAddresses.length
+    ? allFilteredAddresses[selectedIndex].address
+    : null
+
   // Use shared keyboard navigation hook
   const { handleSearchKeyDown } = useKeyboardNavigation({
     searchTerm,
@@ -171,10 +176,10 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
     onIndexChange: setSelectedIndex
   })
 
-  // Reset selected index when search term changes
+  // Set selected index to first result when search term changes
   useEffect(() => {
-    setSelectedIndex(-1)
-  }, [searchTerm])
+    setSelectedIndex(allFilteredAddresses.length > 0 ? 0 : -1)
+  }, [searchTerm, allFilteredAddresses.length])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -224,7 +229,7 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
           </div>
 
           {/* Search Input */}
-          <div className="p-2 border-b border-gray-200">
+          <div className="p-2 border-b border-gray-200 relative">
             <input
               type="text"
               value={searchTerm}
@@ -233,6 +238,11 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
                      placeholder="Search addresses... (try: eoa user0, group1.set2, fuzzy matching)"
               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               autoFocus
+            />
+            {/* Preview overlay */}
+            <SearchPreview
+              searchTerm={searchTerm}
+              selectedValue={selectedAddress}
             />
             {allFilteredAddresses.length > 0 && (
               <p className="mt-1 text-xs text-gray-500">

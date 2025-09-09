@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
-import Fuse from 'fuse.js'
+import SearchPreview from './SearchPreview'
 
 interface TypeItem {
   type: string
@@ -12,7 +12,6 @@ interface TypeItem {
     type?: number[][]
     category?: number[][]
   }
-  score?: number
 }
 
 interface TypeSelectorProps {
@@ -64,71 +63,47 @@ const SOLIDITY_TYPES: TypeItem[] = [
   { type: 'array', category: 'Structured' },
 ]
 
-// Fuse.js configuration for fuzzy search
-const fuseOptions = {
-  keys: [
-    { name: 'type', weight: 0.8 },
-    { name: 'category', weight: 0.2 }
-  ],
-  threshold: 0.4, // Lower = more strict matching (0.0 = exact, 1.0 = match anything)
-  distance: 100, // Maximum distance for a match
-  includeScore: true,
-  includeMatches: true,
-  minMatchCharLength: 1,
-  shouldSort: true,
-  findAllMatches: true,
-  ignoreLocation: true, // Don't consider location of match in string
-  useExtendedSearch: true, // Enable advanced search syntax
-}
 
-// Fuzzy search for types using Fuse.js
+// Exact sub-sequence matching - no tolerance for mistakes
 const matchesSearchTerm = (item: TypeItem, searchTerm: string): boolean => {
   if (!searchTerm.trim()) return true
 
-  const fuse = new Fuse([item], fuseOptions)
-  const results = fuse.search(searchTerm)
-  return results.length > 0
-}
+  const searchLower = searchTerm.toLowerCase().trim()
+  const typeLower = item.type.toLowerCase()
 
-// Fuzzy scoring for types using Fuse.js
-const getSearchScore = (item: TypeItem, searchTerm: string): number => {
-  if (!searchTerm.trim()) return 0
-
-  const fuse = new Fuse([item], fuseOptions)
-  const results = fuse.search(searchTerm)
-
-  if (results.length > 0) {
-    // Fuse.js returns scores where 0 = perfect match, 1 = no match
-    // Convert to our scoring system where higher = better
-    const fuseScore = results[0].score || 1
-    return Math.round((1 - fuseScore) * 100)
+  // Check if search term is a subsequence of the type
+  let searchIndex = 0
+  for (let i = 0; i < typeLower.length && searchIndex < searchLower.length; i++) {
+    if (typeLower[i] === searchLower[searchIndex]) {
+      searchIndex++
+    }
   }
 
-  return 0
+  return searchIndex === searchLower.length
 }
 
-// Search with highlighting support using Fuse.js
+// Simple highlighting for subsequence matches
 const searchWithHighlights = (items: TypeItem[], searchTerm: string) => {
   if (!searchTerm.trim()) return items.map(item => ({ ...item, highlights: {} }))
 
-  const fuse = new Fuse(items, {
-    ...fuseOptions,
-    includeMatches: true,
-  })
-
-  const results = fuse.search(searchTerm)
-  const resultMap = new Map(results.map(result => [result.item.type, result]))
+  const searchLower = searchTerm.toLowerCase()
 
   return items.map(item => {
-    const result = resultMap.get(item.type)
     const highlights: { type?: number[][], category?: number[][] } = {}
+    const typeLower = item.type.toLowerCase()
 
-    if (result) {
-      result.matches?.forEach(match => {
-        if (match.key && (match.key === 'type' || match.key === 'category')) {
-          highlights[match.key] = match.indices.map(range => [range[0], range[1]])
-        }
-      })
+    // Find subsequence matches in the type
+    const typeHighlights: number[][] = []
+    let searchIndex = 0
+    for (let i = 0; i < typeLower.length && searchIndex < searchLower.length; i++) {
+      if (typeLower[i] === searchLower[searchIndex]) {
+        typeHighlights.push([i, i])
+        searchIndex++
+      }
+    }
+
+    if (typeHighlights.length > 0) {
+      highlights.type = typeHighlights
     }
 
     return {
@@ -153,11 +128,9 @@ export default function TypeSelector({
   // Apply fuzzy search with highlights
   const highlightedResults = searchWithHighlights(SOLIDITY_TYPES, searchTerm)
 
-  // Filter to only show matching results and sort by score
+  // Filter to only show matching results
   const filteredTypes = highlightedResults
     .filter(item => matchesSearchTerm(item, searchTerm))
-    .map(item => ({ ...item, score: getSearchScore(item, searchTerm) }))
-    .sort((a, b) => b.score - a.score)
 
   // Group by category
   const categories = filteredTypes.reduce((acc, item) => {
@@ -208,10 +181,10 @@ export default function TypeSelector({
     }
   }, [disabled, isOpen])
 
-  // Reset selected index when search term changes
+  // Set selected index to first result when search term changes
   useEffect(() => {
-    setSelectedIndex(-1)
-  }, [searchTerm])
+    setSelectedIndex(filteredTypes.length > 0 ? 0 : -1)
+  }, [searchTerm, filteredTypes.length])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -231,6 +204,11 @@ export default function TypeSelector({
 
   // Find the current type info
   const currentType = SOLIDITY_TYPES.find(item => item.type === value)
+
+  // Get the selected type for preview
+  const selectedType = selectedIndex >= 0 && selectedIndex < filteredTypes.length
+    ? filteredTypes[selectedIndex].type
+    : null
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
@@ -270,7 +248,7 @@ export default function TypeSelector({
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
           {/* Search Input */}
-          <div className="p-2 border-b border-gray-200">
+          <div className="p-2 border-b border-gray-200 relative">
             <input
               type="text"
               value={searchTerm}
@@ -279,6 +257,11 @@ export default function TypeSelector({
               placeholder="Search types (e.g., uint, address, bytes)..."
               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               autoFocus
+            />
+            {/* Preview overlay */}
+            <SearchPreview
+              searchTerm={searchTerm}
+              selectedValue={selectedType}
             />
             {searchTerm && filteredTypes.length === 0 && (
               <p className="mt-1 text-xs text-gray-500">
