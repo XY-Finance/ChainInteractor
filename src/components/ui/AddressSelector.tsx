@@ -3,6 +3,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
+import { matchesSearchTerm, getSearchScore, fuzzySearchAddresses, type AddressItem } from '../../utils/addressSearch'
+import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 
 interface AddressSelectorProps {
   value: string
@@ -65,7 +67,7 @@ export default function AddressSelector({
   // Get all addresses from config and localStorage
   const allConfigAddresses = new Set<string>()
   const addressCategories = Object.entries(addresses).map(([category, categoryData]) => {
-    const addresses: Array<{ path: string; label: string; address: string }> = []
+    const addresses: AddressItem[] = []
 
     if (typeof categoryData === 'object' && categoryData !== null) {
       Object.entries(categoryData).forEach(([key, value]) => {
@@ -117,13 +119,14 @@ export default function AddressSelector({
     })
   }
 
-  // Filter addresses based on search term
+
+  // Filter and rank addresses based on enhanced search term
   const filteredCategories = addressCategories.map(category => ({
     ...category,
-    addresses: category.addresses.filter(item =>
-      item.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.address.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    addresses: category.addresses
+      .filter(item => matchesSearchTerm(item, searchTerm))
+      .map(item => ({ ...item, score: getSearchScore(item, searchTerm) }))
+      .sort((a, b) => b.score - a.score) // Sort by relevance score
   })).filter(category => category.addresses.length > 0)
 
   // Flatten all filtered addresses for keyboard navigation
@@ -139,45 +142,19 @@ export default function AddressSelector({
     setSelectedIndex(-1)
   }, [onChange])
 
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const trimmedSearch = searchTerm.trim()
-
-      // If there's a selected item, accept it
-      if (selectedIndex >= 0 && selectedIndex < allFilteredAddresses.length) {
-        handleSelect(allFilteredAddresses[selectedIndex].address)
-        return
-      }
-
-      // If search term is a valid address and no matches found, add it to localStorage
-      if (trimmedSearch && isAddress(trimmedSearch) && filteredCategories.length === 0) {
-        handleSelect(trimmedSearch)
-      }
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-      if (allFilteredAddresses.length > 0) {
-        const nextIndex = selectedIndex < allFilteredAddresses.length - 1 ? selectedIndex + 1 : 0
-        setSelectedIndex(nextIndex)
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (allFilteredAddresses.length > 0) {
-        const nextIndex = selectedIndex < allFilteredAddresses.length - 1 ? selectedIndex + 1 : 0
-        setSelectedIndex(nextIndex)
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (allFilteredAddresses.length > 0) {
-        const prevIndex = selectedIndex > 0 ? selectedIndex - 1 : allFilteredAddresses.length - 1
-        setSelectedIndex(prevIndex)
-      }
-    } else if (e.key === 'Escape') {
-      setIsOpen(false)
+  // Use shared keyboard navigation hook
+  const { handleSearchKeyDown } = useKeyboardNavigation({
+    searchTerm,
+    selectedIndex,
+    allFilteredAddresses,
+    onSelect: (address) => handleSelect(address),
+    onClear: () => {
       setSearchTerm('')
       setSelectedIndex(-1)
-    }
-  }, [searchTerm, filteredCategories.length, selectedIndex, allFilteredAddresses, handleSelect])
+    },
+    onIndexChange: setSelectedIndex,
+    onClose: () => setIsOpen(false)
+  })
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let newValue = e.target.value
@@ -371,8 +348,16 @@ export default function AddressSelector({
               </p>
             )}
             {allFilteredAddresses.length > 0 && (
+              <div className="mt-1 text-xs text-gray-500">
+                <p>Use Tab/Arrow keys to navigate, Enter to select</p>
+                     <p className="text-gray-400 mt-1">
+                       💡 Try: "eoa user0", "group1.set2", fuzzy matching, or advanced operators (!, ^, $)
+                     </p>
+              </div>
+            )}
+            {searchTerm && filteredCategories.length === 0 && !isSearchTermValidAddress && (
               <p className="mt-1 text-xs text-gray-500">
-                Use Tab/Arrow keys to navigate, Enter to select
+                No matches found. Try different search terms or check spelling.
               </p>
             )}
           </div>

@@ -1,7 +1,11 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
+import { isAddress } from 'viem'
+import { matchesSearchTerm, type AddressItem } from '../../utils/addressSearch'
+import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
+import AddressSelector from './AddressSelector'
 
 interface AddressBookProps {
   className?: string
@@ -17,6 +21,9 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   const handleCopy = useCallback(async (address: string, label: string) => {
     try {
@@ -29,7 +36,16 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
   }, [])
 
   const toggleExpanded = useCallback(() => {
-    setIsExpanded(prev => !prev)
+    setIsExpanded(prev => {
+      const newExpanded = !prev
+      if (!newExpanded) {
+        // Reset search state when closing
+        setSearchTerm('')
+        setSelectedIndex(-1)
+        setExpandedCategories(new Set())
+      }
+      return newExpanded
+    })
   }, [])
 
   const toggleCategory = useCallback((category: string) => {
@@ -44,10 +60,31 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
     })
   }, [])
 
+  // Handle address selection from AddressSelector
+  const handleAddressSelect = useCallback((address: string) => {
+    handleCopy(address, address)
+  }, [handleCopy])
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    let newValue = e.target.value
+
+    // Auto-add "0x" prefix for address input
+    if (newValue.length > 0 && !newValue.startsWith('0x')) {
+      // Check if it looks like a hex address (40 characters of hex)
+      const hexPattern = /^[0-9a-fA-F]{40}$/
+      if (hexPattern.test(newValue)) {
+        newValue = '0x' + newValue
+      }
+    }
+
+    setSearchTerm(newValue)
+  }, [])
+
+
   // Get all addresses from config and localStorage
   const allConfigAddresses = new Set<string>()
   const addressCategories = Object.entries(addresses).map(([category, categoryData]) => {
-    const addresses: Array<{ path: string; label: string; address: string }> = []
+    const addresses: AddressItem[] = []
 
     if (typeof categoryData === 'object' && categoryData !== null) {
       Object.entries(categoryData).forEach(([key, value]) => {
@@ -99,6 +136,50 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
     })
   }
 
+
+  // Filter addresses based on search term
+  const filteredCategories = addressCategories.map(category => ({
+    ...category,
+    addresses: category.addresses.filter(item => matchesSearchTerm(item, searchTerm))
+  })).filter(category => category.addresses.length > 0)
+
+  // Flatten all filtered addresses for keyboard navigation
+  const allFilteredAddresses = filteredCategories.flatMap(category =>
+    category.addresses.map(addr => ({ ...addr, category: category.category }))
+  )
+
+  // Use shared keyboard navigation hook
+  const { handleSearchKeyDown } = useKeyboardNavigation({
+    searchTerm,
+    selectedIndex,
+    allFilteredAddresses,
+    onSelect: handleCopy,
+    onClear: () => setSearchTerm(''),
+    onIndexChange: setSelectedIndex
+  })
+
+  // Reset selected index when search term changes
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [searchTerm])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        setIsExpanded(false)
+        setSearchTerm('')
+        setExpandedCategories(new Set())
+        setSelectedIndex(-1)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
   return (
     <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
       {/* Address Book Button */}
@@ -129,12 +210,30 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
             </button>
           </div>
 
+          {/* Search Input */}
+          <div className="p-2 border-b border-gray-200">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
+                     placeholder="Search addresses... (try: eoa user0, group1.set2, fuzzy matching)"
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              autoFocus
+            />
+            {allFilteredAddresses.length > 0 && (
+              <p className="mt-1 text-xs text-gray-500">
+                Use Tab/Arrow keys to navigate, Enter to copy
+              </p>
+            )}
+          </div>
+
           {/* Address Categories */}
           <div className="max-h-80 overflow-y-auto">
-            {addressCategories.length > 0 ? (
+            {(searchTerm ? filteredCategories : addressCategories).length > 0 ? (
               <div className="p-2 space-y-1">
-                {addressCategories.map(({ category, addresses, count }) => {
-                  const isExpanded = expandedCategories.has(category)
+                {(searchTerm ? filteredCategories : addressCategories).map(({ category, addresses, count }) => {
+                  const isExpanded = expandedCategories.has(category) || searchTerm.length > 0
                   return (
                     <div key={category} className="border border-gray-200 rounded-lg overflow-hidden">
                       {/* Category Header */}
@@ -163,12 +262,17 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
                       {/* Category Addresses */}
                       {isExpanded && (
                         <div className="bg-white">
-                          {addresses.map(({ path, label, address }) => (
-                            <div
-                              key={path}
-                              className="group flex items-center justify-between p-3 hover:bg-gray-50 transition-colors cursor-pointer border-t border-gray-100"
-                              onClick={() => handleCopy(address, `${category}.${label}`)}
-                            >
+                          {addresses.map(({ path, label, address }, index) => {
+                            const globalIndex = allFilteredAddresses.findIndex(addr => addr.path === path)
+                            const isSelected = globalIndex === selectedIndex
+                            return (
+                              <div
+                                key={path}
+                                className={`group flex items-center justify-between p-3 hover:bg-gray-50 transition-colors cursor-pointer border-t border-gray-100 ${
+                                  isSelected ? 'bg-blue-100 border-blue-300' : ''
+                                }`}
+                                onClick={() => handleCopy(address, `${category}.${label}`)}
+                              >
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium text-gray-900 truncate">
                                   {label}
@@ -187,7 +291,8 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
                                 )}
                               </div>
                             </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       )}
                     </div>
@@ -196,7 +301,7 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
               </div>
             ) : (
               <div className="p-4 text-center text-gray-500">
-                No addresses found
+                {searchTerm ? 'No addresses found matching your search' : 'No addresses found'}
               </div>
             )}
           </div>
