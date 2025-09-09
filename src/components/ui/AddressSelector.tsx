@@ -360,14 +360,6 @@ export default function AddressSelector({
                 Press Enter to add this address
               </p>
             )}
-            {allFilteredAddresses.length > 0 && (
-              <div className="mt-1 text-xs text-gray-500">
-                <p>Use Tab/Arrow keys to navigate, Enter to select</p>
-                     <p className="text-gray-400 mt-1">
-                       💡 Try: "eoa user0", "group1.set2", fuzzy matching, or advanced operators (!, ^, $)
-                     </p>
-              </div>
-            )}
             {searchTerm && filteredCategories.length === 0 && !isSearchTermValidAddress && (
               <p className="mt-1 text-xs text-gray-500">
                 No matches found. Try different search terms or check spelling.
