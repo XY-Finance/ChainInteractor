@@ -13,7 +13,7 @@ import OperationLogs from './components/OperationLogs'
 const COMMON_USE_CASES = [
   {
     id: 'erc20permit',
-    title: 'ERC20 Permit',
+    title: 'EIP-2612 Permit',
     description: 'Sign gasless token approvals using EIP-712 signatures',
     status: 'ready' as const
   },
@@ -22,12 +22,6 @@ const COMMON_USE_CASES = [
     title: 'EIP-7702 Authorization',
     description: 'Delegate control over your EOA to smart contracts',
     status: 'ready' as const
-  },
-  {
-    id: 'eip2612',
-    title: 'EIP-2612 Permit',
-    description: 'Gasless token approvals with deadline-based permits',
-    status: 'tba' as const
   },
   {
     id: 'eip4361',
