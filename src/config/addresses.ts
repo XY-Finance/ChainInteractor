@@ -22,8 +22,15 @@ export const addresses = {
     kernel: '0xd6CEDDe84be40893d153Be9d467CD6aD37875b28' as Address,
   },
 
+  // 7579 module addresses
+  modules: {
+    ECDSASginer: '0x6A6F069E2a08c2468e7724Ab3250CdBFBA14D4FF' as Address, // Kernel module
+    ECDSAValidator: '0xd9AB5096a832b9ce79914329DAEE236f8Eea0390' as Address, // Kernel module: Grant unlimited Ownership
+  },
+
   // Contract addresses by network
   contracts: {
+    ENTRYPOINT_v7: '0x0000000071727De22E5E9d8BAf0edAc6f37da032' as Address,
     sepolia: {
       // Add Sepolia-specific contract addresses
     },

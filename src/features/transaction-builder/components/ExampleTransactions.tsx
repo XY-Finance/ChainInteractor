@@ -96,6 +96,32 @@ const EXAMPLE_TRANSACTIONS: ExampleTransaction[] = [
         description: 'Spender address'
       }
     ]
+  },
+  {
+    name: 'Install ECDSA Signer Module',
+    description: 'Install ECDSA Signer module with user2 as the signer',
+    functionName: 'installModule',
+    targetAddress: addresses.eoa.user1,
+    parameters: [
+      {
+        name: 'moduleTypeId',
+        type: 'uint256',
+        value: '6',
+        description: 'Module type ID for ECDSA Signer'
+      },
+      {
+        name: 'module',
+        type: 'address',
+        value: addresses.modules.ECDSASginer,
+        description: 'ECDSASginer module address'
+      },
+      {
+        name: 'initData',
+        type: 'bytes',
+        value: `0x${'0'.repeat(64)}${addresses.eoa.user2.slice(2)}`, // 32 bytes of zeros + 20 bytes of user2 address
+        description: 'Initialization data: 32 bytes of zeros + 20 bytes of user2 address'
+      }
+    ]
   }
 ]
 
