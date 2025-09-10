@@ -45,9 +45,6 @@ const ParameterInput = React.memo(function ParameterInput({
 
   // Helper functions for structured types (matching TransactionBuilder)
   const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
-  const getBaseType = (type: string): string => type.replace(/\[\]/g, '')
-
-  const baseType = getBaseType(parameter.type)
   const isArray = parameter.type === 'array'
   const isTuple = parameter.type === 'tuple'
 
@@ -137,7 +134,7 @@ const ParameterInput = React.memo(function ParameterInput({
     const newComponent: Parameter = {
       id: Date.now().toString() + Math.random(),
       name: isArray ? `element_${(parameter.components || []).length}` : '',
-      type: isArray ? baseType : 'address',
+      type: isArray ? 'address' : 'address', // TODO: Allow user to specify array element type
       value: ''
     }
 
@@ -384,7 +381,7 @@ const ParameterInput = React.memo(function ParameterInput({
 
         {/* Parameter Value */}
         <div className="relative md:col-span-6">
-          {baseType === 'bool' ? (
+          {parameter.type === 'bool' ? (
             <div className="flex items-center justify-center h-10">
               <button
                 type="button"
@@ -405,7 +402,7 @@ const ParameterInput = React.memo(function ParameterInput({
                 {parameter.value === 'true' ? 'true' : 'false'}
               </span>
             </div>
-          ) : baseType === 'tuple' ? (
+          ) : parameter.type === 'tuple' ? (
             <div className="flex items-center justify-center h-10">
               <button
                 onClick={onAddTupleComponent}
@@ -423,7 +420,7 @@ const ParameterInput = React.memo(function ParameterInput({
                 ➕ Add Element
               </button>
             </div>
-          ) : baseType === 'address' ? (
+          ) : parameter.type === 'address' ? (
             <AddressSelector
               value={parameter.value}
               onChange={handleValueChange}

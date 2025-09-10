@@ -56,7 +56,6 @@ const validateAddress = (address: string): { isValid: boolean; message: string }
 
 // Helper functions for structured types (arrays and tuples)
 const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
-const getBaseType = (type: string): string => type.replace(/\[\]/g, '')
 
 const validateParameter = (parameter: Parameter): { isValid: boolean; message: string } => {
   if (!parameter.value.trim()) {
