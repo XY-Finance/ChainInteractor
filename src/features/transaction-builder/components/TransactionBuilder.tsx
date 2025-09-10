@@ -67,50 +67,20 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
 
   // Handle all types in a unified switch statement
   switch (parameter.type) {
-    // Handle structured types (arrays and tuples) - treat them identically
-    default:
-      if (isStructuredType(parameter.type)) {
-        try {
-          const structuredValue = JSON.parse(value)
-
-          // For arrays, expect an array; for tuples, expect an object
-          if (parameter.type === 'array') {
-            if (!Array.isArray(structuredValue)) {
-              return { isValid: false, message: 'Must be a JSON array' }
-            }
-          } else {
-            if (typeof structuredValue !== 'object' || Array.isArray(structuredValue)) {
-              return { isValid: false, message: 'Must be a JSON object' }
+    case 'array':
+    case 'tuple':
+      if (parameter.components && parameter.components.length > 0) {
+          for (let i = 0; i < parameter.components.length; i++) {
+            const componentValidation = validateParameter({
+              ...parameter.components[i],
+              value: String(parameter.components[i].value)
+            })
+            if (!componentValidation.isValid) {
+              return { isValid: false, message: `Child parameter is invalid` }
             }
           }
-
-          // Validate each component/element
-          if (parameter.components && parameter.components.length > 0) {
-            for (let i = 0; i < parameter.components.length; i++) {
-              const component = parameter.components[i]
-              const componentValue = parameter.type === 'array'
-                ? structuredValue[i]
-                : structuredValue[component.name]
-
-              if (componentValue === undefined) {
-                return { isValid: false, message: `Missing ${parameter.type === 'array' ? 'element' : 'component'}: ${component.name}` }
-              }
-
-              const componentValidation = validateParameter({
-                ...component,
-                value: String(componentValue)
-              })
-              if (!componentValidation.isValid) {
-                return { isValid: false, message: `Invalid ${component.name}: ${componentValidation.message}` }
-              }
-            }
-          }
-        } catch (error) {
-          return { isValid: false, message: `Invalid JSON format for ${parameter.type === 'array' ? 'array' : 'tuple'}` }
-        }
-        return { isValid: true, message: '' }
       }
-      break
+      return { isValid: true, message: '' }
     case 'address':
       if (!isAddress(value)) {
         return { isValid: false, message: 'Invalid address format' }
@@ -150,6 +120,12 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
     case 'bytes1':
       if (!/^0x[0-9a-fA-F]*$/.test(value)) {
         return { isValid: false, message: 'Must be hex format (0x...)' }
+      }
+      break
+    default:
+      // For any other types, just validate that value is not empty
+      if (!value) {
+        return { isValid: false, message: 'Value is required' }
       }
       break
   }
@@ -370,12 +346,24 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
   // Load example transaction
   const loadExample = useCallback((example: any) => {
-    const parameters = example.parameters.map((p: any) => ({
-      id: Date.now().toString() + Math.random(),
-      name: p.name,
-      type: p.type,
-      value: p.value
-    }))
+    // Helper function to recursively create parameters with components
+    const createParameter = (p: any): Parameter => {
+      const parameter: Parameter = {
+        id: Date.now().toString() + Math.random(),
+        name: p.name,
+        type: p.type,
+        value: p.value
+      }
+
+      // Add components if they exist
+      if (p.components && p.components.length > 0) {
+        parameter.components = p.components.map((comp: any) => createParameter(comp))
+      }
+
+      return parameter
+    }
+
+    const parameters = example.parameters.map((p: any) => createParameter(p))
 
     setTransactionData({
       functionName: example.functionName,

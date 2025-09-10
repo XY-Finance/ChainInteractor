@@ -46,7 +46,10 @@ const generateTupleAnnotation = (parentAnnotation: string, index: number, isLast
   if (parentAnnotation === "1") {
     return "+-·"
   } else {
-    const parentLines = parentAnnotation.slice(0, -1).replace(/\+/g, '|').replace(/-/g, ' ')
+    const shouldSlice = parentAnnotation.endsWith('·');
+    const parentLines = (shouldSlice ? parentAnnotation.slice(0, -1) : parentAnnotation)
+      .replace(/\+/g, '|')
+      .replace(/-/g, ' ');
     const connector = "+-·"
     return parentLines + connector
   }
