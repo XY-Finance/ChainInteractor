@@ -8,6 +8,7 @@ import { useWalletManager } from '../../../hooks/useWalletManager'
 import { encodeFunctionData, type Address, isAddress } from 'viem'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
+import { isStructuredType } from '../utils/typeUtils'
 
 export interface Parameter {
   id: string
@@ -54,8 +55,7 @@ const validateAddress = (address: string): { isValid: boolean; message: string }
   return { isValid: true, message: '' }
 }
 
-// Helper functions for structured types (arrays and tuples)
-const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
+// Helper functions for structured types (arrays and tuples) - now imported from utils
 
 const validateParameter = (parameter: Parameter): { isValid: boolean; message: string } => {
   if (!parameter.value.trim()) {
@@ -150,30 +150,6 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
     case 'bytes1':
       if (!/^0x[0-9a-fA-F]*$/.test(value)) {
         return { isValid: false, message: 'Must be hex format (0x...)' }
-      }
-      break
-    case 'tuple':
-      if (parameter.components && parameter.components.length > 0) {
-        try {
-          const tupleValue = JSON.parse(value)
-          // Validate each component
-          for (const component of parameter.components) {
-            if (!(component.name in tupleValue)) {
-              return { isValid: false, message: `Missing component: ${component.name}` }
-            }
-            const componentValidation = validateParameter({
-              ...component,
-              value: String(tupleValue[component.name])
-            })
-            if (!componentValidation.isValid) {
-              return { isValid: false, message: `Invalid ${component.name}: ${componentValidation.message}` }
-            }
-          }
-        } catch (error) {
-          return { isValid: false, message: 'Invalid JSON format for tuple' }
-        }
-      } else {
-        return { isValid: false, message: 'Tuple must have components defined' }
       }
       break
   }
@@ -285,260 +261,124 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     }))
   }, [])
 
-  // Add a new tuple/array component (recursive function to handle nested tuples and arrays)
-  const addTupleComponent = useCallback((parameterId: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(param => {
-        // If this is the target parameter (top level)
-        if (param.id === parameterId) {
-          const newComponent: Parameter = {
-            id: Date.now().toString() + Math.random(),
-            name: '',
-            type: 'address',
-            value: ''
-          }
-          const updatedComponents = [...(param.components || []), newComponent]
-          return {
-            ...param,
-            components: updatedComponents
-          }
-        }
-
-        // If this parameter has tuple components, search recursively
-        if (param.type === 'tuple' && param.components) {
-          const addComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === parameterId) {
-                const newComponent: Parameter = {
-                  id: Date.now().toString() + Math.random(),
-                  name: '',
-                  type: 'address',
-                  value: ''
-                }
-                return { ...comp, components: [...(comp.components || []), newComponent] }
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: addComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: addComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...param, components: addComponentsRecursive(param.components) }
-        }
-
-        // If this parameter has array components, search recursively
-        if (isStructuredType(param.type) && param.components) {
-          const addComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === parameterId) {
-                const newComponent: Parameter = {
-                  id: Date.now().toString() + Math.random(),
-                  name: '',
-                  type: 'address',
-                  value: ''
-                }
-                return { ...comp, components: [...(comp.components || []), newComponent] }
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: addComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: addComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...param, components: addComponentsRecursive(param.components) }
-        }
-
+  // Helper function to find parameter by ID recursively
+  const findParameterById = useCallback((parameters: Parameter[], id: string): Parameter | null => {
+    for (const param of parameters) {
+      if (param.id === id) {
         return param
-      })
-    }))
+      }
+      if (param.components) {
+        const found = findParameterById(param.components, id)
+        if (found) return found
+      }
+    }
+    return null
   }, [])
 
-  // Add a new array element (for array types)
-  const addArrayElement = useCallback((parameterId: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(param => {
-        if (param.id === parameterId && param.type.endsWith('[]')) {
-          const baseType = param.type.slice(0, -2) // Remove '[]' suffix
-          const newElement: Parameter = {
-            id: Date.now().toString() + Math.random(),
-            name: `element_${(param.components || []).length}`,
-            type: baseType,
-            value: ''
-          }
-          const updatedComponents = [...(param.components || []), newElement]
-          return {
-            ...param,
-            components: updatedComponents
-          }
-        }
-        return param
-      })
-    }))
-  }, [])
+  // Add a new component to a parameter
+  const addComponentTo = useCallback((parameterId: string) => {
+    setTransactionData(prev => {
+      const parameter = findParameterById(prev.parameters, parameterId)
+      if (!parameter) return prev
 
-  // Remove a parameter (recursive function to handle tuple and array components at any depth)
+      const newComponent: Parameter = {
+        id: Date.now().toString() + Math.random(),
+        name: '',
+        type: 'address',
+        value: ''
+      }
+
+      // Update the parameter with the new component
+      return {
+        ...prev,
+        parameters: prev.parameters.map(param => {
+          if (param.id === parameterId) {
+            return { ...param, components: [...(param.components || []), newComponent] }
+          }
+          if (param.components) {
+            return { ...param, components: param.components.map(comp =>
+              comp.id === parameterId
+                ? { ...comp, components: [...(comp.components || []), newComponent] }
+                : comp
+            )}
+          }
+          return param
+        })
+      }
+    })
+  }, [findParameterById])
+
+
+  // Remove a parameter
   const removeParameter = useCallback((id: string, parentId?: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(p => {
-        // If this is the target parameter (top level)
-        if (p.id === id) {
-          return null // This will be filtered out
-        }
-
-        // If this parameter has tuple components, search recursively
-        if (p.type === 'tuple' && p.components) {
-          const removeComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.filter(comp => {
-              if (comp.id === id) {
-                return false // Remove this component
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: removeComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: removeComponentsRecursive(comp.components) }
-              }
-
-              return true
-            })
+    setTransactionData(prev => {
+      // Helper function to remove component recursively
+      const removeComponent = (parameters: Parameter[]): Parameter[] => {
+        return parameters.filter(param => {
+          if (param.id === id) {
+            return false // Remove this parameter
           }
-
-          return { ...p, components: removeComponentsRecursive(p.components) }
-        }
-
-        // If this parameter has array components, search recursively
-        if (isStructuredType(p.type) && p.components) {
-          const removeComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.filter(comp => {
-              if (comp.id === id) {
-                return false // Remove this component
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: removeComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: removeComponentsRecursive(comp.components) }
-              }
-
-              return true
-            })
+          if (param.components) {
+            param.components = removeComponent(param.components)
           }
+          return true // Keep this parameter
+        })
+      }
 
-          return { ...p, components: removeComponentsRecursive(p.components) }
-        }
-
-        return p
-      }).filter(Boolean) as Parameter[] // Remove null values
-    }))
+      return {
+        ...prev,
+        parameters: removeComponent(prev.parameters)
+      }
+    })
   }, [])
 
-  // Update parameter (recursive function to handle tuple components at any depth)
+  // Update parameter
   const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(p => {
-        // If this is the target parameter (top level)
-        if (p.id === id) {
-          if (field === 'components') {
-            // Handle tuple components update
-            try {
-              const components = JSON.parse(value)
-              return { ...p, components }
-            } catch {
-              return p
+    setTransactionData(prev => {
+      const parameter = findParameterById(prev.parameters, id)
+      if (!parameter) return prev
+
+      // Update the parameter
+      return {
+        ...prev,
+        parameters: prev.parameters.map(p => {
+          if (p.id === id) {
+            if (field === 'components') {
+              try {
+                const components = JSON.parse(value)
+                return { ...p, components }
+              } catch {
+                return p
+              }
             }
+
+            // Initialize structured components when type is changed to a structured type
+            if (field === 'type' && isStructuredType(value) && !p.components) {
+              return { ...p, [field]: value, components: [] }
+            }
+
+            // Clear components when switching from structured to non-structured
+            if (field === 'type' && isStructuredType(p.type) && !isStructuredType(value)) {
+              return { ...p, [field]: value, components: undefined }
+            }
+
+            return { ...p, [field]: value }
           }
 
-          // Initialize structured components when type is changed to a structured type
-          if (field === 'type' && isStructuredType(value) && !p.components) {
-            return { ...p, [field]: value, components: [] }
+          // Update nested components
+          if (p.components) {
+            return { ...p, components: p.components.map(comp =>
+              comp.id === id
+                ? { ...comp, [field]: value }
+                : comp
+            )}
           }
 
-          // Clear components when switching from structured to non-structured
-          if (field === 'type' && isStructuredType(p.type) && !isStructuredType(value)) {
-            return { ...p, [field]: value, components: undefined }
-          }
-
-          return { ...p, [field]: value }
-        }
-
-        // If this parameter has tuple components, search recursively
-        if (p.type === 'tuple' && p.components) {
-          const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === id) {
-                if (field === 'type' && isStructuredType(value) && !comp.components) {
-                  return { ...comp, [field]: value, components: [] }
-                }
-                return { ...comp, [field]: value }
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: updateComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: updateComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...p, components: updateComponentsRecursive(p.components) }
-        }
-
-        // If this parameter has array components, search recursively
-        if (isStructuredType(p.type) && p.components) {
-          const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === id) {
-                if (field === 'type' && isStructuredType(value) && !comp.components) {
-                  return { ...comp, [field]: value, components: [] }
-                }
-                return { ...comp, [field]: value }
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: updateComponentsRecursive(comp.components) }
-              }
-
-              if (isStructuredType(comp.type) && comp.components) {
-                return { ...comp, components: updateComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...p, components: updateComponentsRecursive(p.components) }
-        }
-
-        return p
-      })
-    }))
-  }, [])
+          return p
+        })
+      }
+    })
+  }, [findParameterById])
 
   // Update function name
   const updateFunctionName = useCallback((functionName: string) => {
@@ -574,8 +414,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
   // Encode function data
   const encodeData = useCallback(async () => {
-    console.log('🔧 Encode function called!')
-    console.log('Current transactionData:', transactionData)
 
     if (!isAllValid) {
       return
@@ -609,8 +447,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         type: 'function'
       }
 
-      console.log('ABI item:', abiItem)
-      console.log('transactionData', transactionData)
 
       // Recursive function to encode values with tuple and array support
       const encodeValues = (params: Parameter[]): any[] => {
@@ -718,7 +554,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         abi: [abiItem],
         args: values
       })
-      console.log('encodedData', encodedData)
 
       setEncodedData(encodedData)
     } catch (error) {
@@ -923,7 +758,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                 validation={validationState.parameters[parameter.id]}
                 onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
                 onRemove={() => removeParameter(parameter.id)}
-                onAddTupleComponent={() => addTupleComponent(parameter.id)}
+                onAddComponent={() => addComponentTo(parameter.id)}
               />
             ))
           })()}

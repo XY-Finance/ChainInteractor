@@ -5,13 +5,14 @@ import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import TypeSelector from '../../../components/ui/TypeSelector'
 import type { Parameter } from './TransactionBuilder'
+import { isStructuredType, isArrayType, isTupleType } from '../utils/typeUtils'
 
 interface ParameterInputProps {
   parameter: Parameter
   validation?: { isValid: boolean; message: string }
   onUpdate: (field: keyof Parameter, value: string) => void
   onRemove: () => void
-  onAddTupleComponent?: () => void
+  onAddComponent?: () => void
   depth?: number
   parentId?: string
   isTupleComponent?: boolean
@@ -36,17 +37,16 @@ const ParameterInput = React.memo(function ParameterInput({
   validation,
   onUpdate,
   onRemove,
-  onAddTupleComponent,
+  onAddComponent,
   depth = 0,
   parentId,
   isTupleComponent = false
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && parameter.value.trim()
 
-  // Helper functions for structured types (matching TransactionBuilder)
-  const isStructuredType = (type: string): boolean => type === 'array' || type === 'tuple'
-  const isArray = parameter.type === 'array'
-  const isTuple = parameter.type === 'tuple'
+  // Helper functions for structured types (now imported from utils)
+  const isArray = isArrayType(parameter.type)
+  const isTuple = isTupleType(parameter.type)
 
   // Dropdown state
   const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false)
@@ -100,173 +100,6 @@ const ParameterInput = React.memo(function ParameterInput({
     onUpdate('value', selectedValue)
     setIsValueDropdownOpen(false)
     valueInputRef.current?.blur()
-  }
-
-
-      // Handle tuple/array component updates
-  const handleTupleComponentUpdate = (componentId: string, field: keyof Parameter, value: string) => {
-    const currentComponents = parameter.components || []
-
-    const updatedComponents = currentComponents.map(comp =>
-      comp.id === componentId ? { ...comp, [field]: value } : comp
-    )
-
-    if (isArray) {
-      // For arrays, reconstruct array value from elements
-      const arrayValue = updatedComponents.map(comp => comp.value)
-      onUpdate('value', JSON.stringify(arrayValue))
-    } else if (isTuple) {
-      // For tuples, reconstruct tuple value from components
-      const tupleValue: any = {}
-      updatedComponents.forEach(comp => {
-        if (comp.name.trim()) {
-          tupleValue[comp.name] = comp.value
-        }
-      })
-      onUpdate('value', JSON.stringify(tupleValue))
-    }
-  }
-
-
-
-    // Add structured component (tuple or array)
-  const addTupleComponent = () => {
-    const newComponent: Parameter = {
-      id: Date.now().toString() + Math.random(),
-      name: isArray ? `element_${(parameter.components || []).length}` : '',
-      type: isArray ? 'address' : 'address', // TODO: Allow user to specify array element type
-      value: ''
-    }
-
-    const currentComponents = parameter.components || []
-    const updatedComponents = [...currentComponents, newComponent]
-    onUpdate('components', JSON.stringify(updatedComponents))
-  }
-
-
-    // Remove structured component (tuple or array)
-  const removeTupleComponent = (componentId: string) => {
-    const currentComponents = parameter.components || []
-    const updatedComponents = currentComponents.filter(comp => comp.id !== componentId)
-    onUpdate('components', JSON.stringify(updatedComponents))
-
-    // Reconstruct the value after removal
-    if (isArray) {
-      const arrayValue = updatedComponents.map(comp => comp.value)
-      onUpdate('value', JSON.stringify(arrayValue))
-    } else if (isTuple) {
-      const tupleValue: any = {}
-      updatedComponents.forEach(comp => {
-        if (comp.name.trim()) {
-          tupleValue[comp.name] = comp.value
-        }
-      })
-      onUpdate('value', JSON.stringify(tupleValue))
-    }
-  }
-
-
-  // Handle nested tuple component updates
-  const handleNestedTupleComponentUpdate = (parentComponentId: string, nestedComponentId: string, field: keyof Parameter, value: string) => {
-    const currentComponents = parameter.components || []
-
-    const updatedComponents = currentComponents.map(comp => {
-      if (comp.id === parentComponentId && comp.components) {
-        const updatedNestedComponents = comp.components.map(nestedComp =>
-          nestedComp.id === nestedComponentId ? { ...nestedComp, [field]: value } : nestedComp
-        )
-
-        // Reconstruct the nested tuple value
-        const nestedTupleValue: any = {}
-        updatedNestedComponents.forEach(nestedComp => {
-          if (nestedComp.name.trim()) {
-            nestedTupleValue[nestedComp.name] = nestedComp.value
-          }
-        })
-
-        return {
-          ...comp,
-          components: updatedNestedComponents,
-          value: JSON.stringify(nestedTupleValue)
-        }
-      }
-      return comp
-    })
-
-    // Reconstruct the parent tuple value
-    const parentTupleValue: any = {}
-    updatedComponents.forEach(comp => {
-      if (comp.name.trim()) {
-        parentTupleValue[comp.name] = comp.value
-      }
-    })
-
-    onUpdate('components', JSON.stringify(updatedComponents))
-    onUpdate('value', JSON.stringify(parentTupleValue))
-  }
-
-  // Add nested tuple component
-  const addNestedTupleComponent = (parentComponentId: string) => {
-    const currentComponents = parameter.components || []
-
-    const updatedComponents = currentComponents.map(comp => {
-      if (comp.id === parentComponentId) {
-        const newNestedComponent: Parameter = {
-          id: Date.now().toString() + Math.random(),
-          name: '',
-          type: 'address',
-          value: ''
-        }
-
-        const currentNestedComponents = comp.components || []
-        const updatedNestedComponents = [...currentNestedComponents, newNestedComponent]
-
-        return {
-          ...comp,
-          components: updatedNestedComponents
-        }
-      }
-      return comp
-    })
-
-    onUpdate('components', JSON.stringify(updatedComponents))
-  }
-
-  // Remove nested tuple component
-  const removeNestedTupleComponent = (parentComponentId: string, nestedComponentId: string) => {
-    const currentComponents = parameter.components || []
-
-    const updatedComponents = currentComponents.map(comp => {
-      if (comp.id === parentComponentId && comp.components) {
-        const updatedNestedComponents = comp.components.filter(nestedComp => nestedComp.id !== nestedComponentId)
-
-        // Reconstruct the nested tuple value
-        const nestedTupleValue: any = {}
-        updatedNestedComponents.forEach(nestedComp => {
-          if (nestedComp.name.trim()) {
-            nestedTupleValue[nestedComp.name] = nestedComp.value
-          }
-        })
-
-        return {
-          ...comp,
-          components: updatedNestedComponents,
-          value: JSON.stringify(nestedTupleValue)
-        }
-      }
-      return comp
-    })
-
-    // Reconstruct the parent tuple value
-    const parentTupleValue: any = {}
-    updatedComponents.forEach(comp => {
-      if (comp.name.trim()) {
-        parentTupleValue[comp.name] = comp.value
-      }
-    })
-
-    onUpdate('components', JSON.stringify(updatedComponents))
-    onUpdate('value', JSON.stringify(parentTupleValue))
   }
 
   // Save recent values when parameter is valid
@@ -405,7 +238,7 @@ const ParameterInput = React.memo(function ParameterInput({
           ) : parameter.type === 'tuple' ? (
             <div className="flex items-center justify-center h-10">
               <button
-                onClick={onAddTupleComponent}
+                onClick={onAddComponent}
                 className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-2 rounded transition-colors border border-blue-200"
               >
                 ➕ Add Component
@@ -414,7 +247,7 @@ const ParameterInput = React.memo(function ParameterInput({
           ) : isArray ? (
             <div className="flex items-center justify-center h-10">
               <button
-                onClick={onAddTupleComponent}
+                onClick={onAddComponent}
                 className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-2 rounded transition-colors border border-green-200"
               >
                 ➕ Add Element
