@@ -41,10 +41,15 @@ const generateArrayAnnotation = (parentAnnotation: string, index: number): strin
   }
 }
 
-const generateTupleAnnotation = (parentAnnotation: string, index: number): string => {
-  // For tuples, show depth numbers: 2, 3, 4, etc.
-  const currentDepth = parseInt(parentAnnotation) + 1
-  return currentDepth.toString()
+const generateTupleAnnotation = (parentAnnotation: string, index: number, isLast: boolean): string => {
+  // For tuples, generate tree-style formatting
+  if (parentAnnotation === "1") {
+    return "+-·"
+  } else {
+    const parentLines = parentAnnotation.slice(0, -1).replace(/\+/g, '|').replace(/-/g, ' ')
+    const connector = "+-·"
+    return parentLines + connector
+  }
 }
 
 
@@ -149,7 +154,7 @@ const ParameterInput = React.memo(function ParameterInput({
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
         {/* Annotation Column */}
         <div className="md:col-span-1">
-          <div className="text-xs text-gray-500 font-medium text-center">
+          <div className="text-xs text-gray-500 font-mono text-left">
             {annotation}
           </div>
         </div>
@@ -318,9 +323,10 @@ const ParameterInput = React.memo(function ParameterInput({
         <div className="mt-4 space-y-2">
           {parameter.components.map((component, index) => {
             // Generate annotation based on parameter type
+            const isLast = index === (parameter.components?.length || 0) - 1
             const componentAnnotation = parameter.type === 'array'
               ? generateArrayAnnotation(annotation, index + 1)
-              : generateTupleAnnotation(annotation, index + 1)
+              : generateTupleAnnotation(annotation, index + 1, isLast)
 
             return (
               <ParameterInput
