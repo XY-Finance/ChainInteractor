@@ -716,30 +716,19 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             const flattenedRows: Array<{
               parameter: Parameter
               depth: number
-              parentId?: string
-              isTupleComponent: boolean
             }> = []
 
-            const addParameterWithComponents = (param: Parameter, depth: number = 0, parentId?: string) => {
+            const addParameterWithComponents = (param: Parameter, depth: number = 0) => {
               // Add the main parameter
               flattenedRows.push({
                 parameter: param,
-                depth,
-                parentId,
-                isTupleComponent: depth > 0
+                depth
               })
-
-              // Add tuple components if this is a tuple
-              if (param.type === 'tuple' && param.components) {
-                param.components.forEach(component => {
-                  addParameterWithComponents(component, depth + 1, param.id)
-                })
-              }
 
               // Add array components if this is an array (treat arrays like tuples)
               if (isStructuredType(param.type) && param.components) {
                 param.components.forEach(component => {
-                  addParameterWithComponents(component, depth + 1, param.id)
+                  addParameterWithComponents(component, depth + 1)
                 })
               }
             }
@@ -748,13 +737,11 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               addParameterWithComponents(param)
             })
 
-            return flattenedRows.map(({ parameter, depth, parentId, isTupleComponent }) => (
+            return flattenedRows.map(({ parameter, depth }) => (
               <ParameterInput
                 key={parameter.id}
                 parameter={parameter}
                 depth={depth}
-                parentId={parentId}
-                isTupleComponent={isTupleComponent}
                 validation={validationState.parameters[parameter.id]}
                 onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
                 onRemove={() => removeParameter(parameter.id)}

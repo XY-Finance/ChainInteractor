@@ -1,11 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import TypeSelector from '../../../components/ui/TypeSelector'
 import type { Parameter } from './TransactionBuilder'
-import { isStructuredType, isArrayType, isTupleType } from '../utils/typeUtils'
+import { isArrayType, isTupleType } from '../utils/typeUtils'
 
 interface ParameterInputProps {
   parameter: Parameter
@@ -14,8 +13,6 @@ interface ParameterInputProps {
   onRemove: () => void
   onAddComponent?: () => void
   depth?: number
-  parentId?: string
-  isTupleComponent?: boolean
 }
 
 // localStorage utilities for recent values
@@ -38,15 +35,11 @@ const ParameterInput = React.memo(function ParameterInput({
   onUpdate,
   onRemove,
   onAddComponent,
-  depth = 0,
-  parentId,
-  isTupleComponent = false
+  depth = 0
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && parameter.value.trim()
 
   // Helper functions for structured types (now imported from utils)
-  const isArray = isArrayType(parameter.type)
-  const isTuple = isTupleType(parameter.type)
 
   // Dropdown state
   const [isNameDropdownOpen, setIsNameDropdownOpen] = useState(false)
@@ -160,12 +153,10 @@ const ParameterInput = React.memo(function ParameterInput({
               setIsNameDropdownOpen(filtered.length > 0)
             }}
             placeholder="Name (optional, e.g., to, amount)"
-            readOnly={isTupleComponent && isArray}
+            readOnly={false}
             className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent text-sm ${
               isInvalid
                 ? 'border-red-300 focus:ring-red-500'
-                : isTupleComponent && isArray
-                ? 'border-gray-200 bg-gray-100 text-gray-600'
                 : 'border-gray-300 focus:ring-blue-500'
             }`}
           />
@@ -190,25 +181,16 @@ const ParameterInput = React.memo(function ParameterInput({
 
         {/* Parameter Type */}
         <div className="md:col-span-2">
-          {isTupleComponent && isArray ? (
-            <input
-              type="text"
-              value={parameter.type}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-sm text-gray-600"
-            />
-          ) : (
-            <TypeSelector
-              value={parameter.type}
-              onChange={(newType) => onUpdate('type', newType)}
-              placeholder="Select type..."
-              className={`text-sm ${
-                isInvalid
-                  ? 'border-red-300 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500'
-              }`}
-            />
-          )}
+          <TypeSelector
+            value={parameter.type}
+            onChange={(newType) => onUpdate('type', newType)}
+            placeholder="Select type..."
+            className={`text-sm ${
+              isInvalid
+                ? 'border-red-300 focus:ring-red-500'
+                : 'border-gray-300 focus:ring-blue-500'
+            }`}
+          />
         </div>
 
 
@@ -235,22 +217,13 @@ const ParameterInput = React.memo(function ParameterInput({
                 {parameter.value === 'true' ? 'true' : 'false'}
               </span>
             </div>
-          ) : parameter.type === 'tuple' ? (
+          ) : parameter.type === 'tuple' || parameter.type === 'array' ? (
             <div className="flex items-center justify-center h-10">
               <button
                 onClick={onAddComponent}
                 className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-2 rounded transition-colors border border-blue-200"
               >
                 ➕ Add Component
-              </button>
-            </div>
-          ) : isArray ? (
-            <div className="flex items-center justify-center h-10">
-              <button
-                onClick={onAddComponent}
-                className="text-xs text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-2 rounded transition-colors border border-green-200"
-              >
-                ➕ Add Element
               </button>
             </div>
           ) : parameter.type === 'address' ? (
