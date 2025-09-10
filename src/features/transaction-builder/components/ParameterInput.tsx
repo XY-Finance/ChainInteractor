@@ -12,7 +12,10 @@ interface ParameterInputProps {
   onUpdate: (field: keyof Parameter, value: string) => void
   onRemove: () => void
   onAddComponent?: () => void
-  depth?: number
+  onUpdateComponent?: (componentId: string, field: keyof Parameter, value: string) => void
+  onRemoveComponent?: (componentId: string) => void
+  onAddComponentTo?: (componentId: string) => void
+  annotation?: string
 }
 
 // localStorage utilities for recent values
@@ -28,6 +31,22 @@ const getRecentValues = (type: string): string[] => {
   return JSON.parse(localStorage.getItem(key) || '[]')
 }
 
+// Helper functions to generate annotations
+const generateArrayAnnotation = (parentAnnotation: string, index: number): string => {
+  // For arrays, show [1], [2], [3] for depth=2, and [parent_index][1] for depth=3+
+  if (parentAnnotation === "1") {
+    return `[${index}]`
+  } else {
+    return `${parentAnnotation}[${index}]`
+  }
+}
+
+const generateTupleAnnotation = (parentAnnotation: string, index: number): string => {
+  // For tuples, show depth numbers: 2, 3, 4, etc.
+  const currentDepth = parseInt(parentAnnotation) + 1
+  return currentDepth.toString()
+}
+
 
 const ParameterInput = React.memo(function ParameterInput({
   parameter,
@@ -35,7 +54,10 @@ const ParameterInput = React.memo(function ParameterInput({
   onUpdate,
   onRemove,
   onAddComponent,
-  depth = 0
+  onUpdateComponent,
+  onRemoveComponent,
+  onAddComponentTo,
+  annotation = "1"
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && parameter.value.trim()
 
@@ -122,21 +144,13 @@ const ParameterInput = React.memo(function ParameterInput({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-
-
-
-
   return (
-    <div className={`border rounded-lg p-4 ${
-      isInvalid
-        ? 'border-red-300 bg-red-50'
-        : 'border-gray-200 bg-gray-50'
-    }`}>
+    <>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-        {/* Depth Column */}
+        {/* Annotation Column */}
         <div className="md:col-span-1">
           <div className="text-xs text-gray-500 font-medium text-center">
-            {depth + 1}
+            {annotation}
           </div>
         </div>
 
@@ -285,7 +299,6 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
       </div>
 
-
       {/* Error message - only show when input is invalid */}
       {isInvalid && (
         <div className="mt-2 text-xs text-red-600">
@@ -299,7 +312,34 @@ const ParameterInput = React.memo(function ParameterInput({
           {getTypeHint(parameter.type)}
         </div>
       )}
-    </div>
+
+      {/* Recursive rendering of components */}
+      {parameter.components && parameter.components.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {parameter.components.map((component, index) => {
+            // Generate annotation based on parameter type
+            const componentAnnotation = parameter.type === 'array'
+              ? generateArrayAnnotation(annotation, index + 1)
+              : generateTupleAnnotation(annotation, index + 1)
+
+            return (
+              <ParameterInput
+                key={component.id}
+                parameter={component}
+                validation={validation}
+                onUpdate={onUpdateComponent ? (field, value) => onUpdateComponent(component.id, field, value) : onUpdate}
+                onRemove={onRemoveComponent ? () => onRemoveComponent(component.id) : onRemove}
+                onAddComponent={onAddComponentTo ? () => onAddComponentTo(component.id) : onAddComponent}
+                onUpdateComponent={onUpdateComponent}
+                onRemoveComponent={onRemoveComponent}
+                onAddComponentTo={onAddComponentTo}
+                annotation={componentAnnotation}
+              />
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 })
 

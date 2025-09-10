@@ -278,33 +278,20 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   // Add a new component to a parameter
   const addComponentTo = useCallback((parameterId: string) => {
     setTransactionData(prev => {
-      const parameter = findParameterById(prev.parameters, parameterId)
-      if (!parameter) return prev
+      const newData = { ...prev }
+      const parameter = findParameterById(newData.parameters, parameterId)
 
-      const newComponent: Parameter = {
-        id: Date.now().toString() + Math.random(),
-        name: '',
-        type: 'address',
-        value: ''
+      if (parameter) {
+        const newComponent: Parameter = {
+          id: Date.now().toString() + Math.random(),
+          name: '',
+          type: 'address',
+          value: ''
+        }
+        parameter.components = [...(parameter.components || []), newComponent]
       }
 
-      // Update the parameter with the new component
-      return {
-        ...prev,
-        parameters: prev.parameters.map(param => {
-          if (param.id === parameterId) {
-            return { ...param, components: [...(param.components || []), newComponent] }
-          }
-          if (param.components) {
-            return { ...param, components: param.components.map(comp =>
-              comp.id === parameterId
-                ? { ...comp, components: [...(comp.components || []), newComponent] }
-                : comp
-            )}
-          }
-          return param
-        })
-      }
+      return newData
     })
   }, [findParameterById])
 
@@ -312,6 +299,8 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   // Remove a parameter
   const removeParameter = useCallback((id: string, parentId?: string) => {
     setTransactionData(prev => {
+      const newData = { ...prev }
+
       // Helper function to remove component recursively
       const removeComponent = (parameters: Parameter[]): Parameter[] => {
         return parameters.filter(param => {
@@ -325,58 +314,41 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         })
       }
 
-      return {
-        ...prev,
-        parameters: removeComponent(prev.parameters)
-      }
+      newData.parameters = removeComponent(newData.parameters)
+      return newData
     })
   }, [])
 
   // Update parameter
   const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
     setTransactionData(prev => {
-      const parameter = findParameterById(prev.parameters, id)
-      if (!parameter) return prev
+      const newData = { ...prev }
+      const parameter = findParameterById(newData.parameters, id)
 
-      // Update the parameter
-      return {
-        ...prev,
-        parameters: prev.parameters.map(p => {
-          if (p.id === id) {
-            if (field === 'components') {
-              try {
-                const components = JSON.parse(value)
-                return { ...p, components }
-              } catch {
-                return p
-              }
-            }
-
-            // Initialize structured components when type is changed to a structured type
-            if (field === 'type' && isStructuredType(value) && !p.components) {
-              return { ...p, [field]: value, components: [] }
-            }
-
-            // Clear components when switching from structured to non-structured
-            if (field === 'type' && isStructuredType(p.type) && !isStructuredType(value)) {
-              return { ...p, [field]: value, components: undefined }
-            }
-
-            return { ...p, [field]: value }
+      if (parameter) {
+        if (field === 'components') {
+          try {
+            const components = JSON.parse(value)
+            parameter.components = components
+          } catch {
+            // Invalid JSON, keep existing components
           }
-
-          // Update nested components
-          if (p.components) {
-            return { ...p, components: p.components.map(comp =>
-              comp.id === id
-                ? { ...comp, [field]: value }
-                : comp
-            )}
+        } else if (field === 'type') {
+          // Initialize structured components when type is changed to a structured type
+          if (isStructuredType(value) && !parameter.components) {
+            parameter.components = []
           }
-
-          return p
-        })
+          // Clear components when switching from structured to non-structured
+          else if (isStructuredType(parameter.type) && !isStructuredType(value)) {
+            parameter.components = undefined
+          }
+          parameter[field] = value
+        } else {
+          parameter[field] = value
+        }
       }
+
+      return newData
     })
   }, [findParameterById])
 
@@ -703,7 +675,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                       {/* Column headers - only show when there are parameters */}
             {transactionData.parameters.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
-                <div className="text-sm font-medium text-gray-700 text-center">Depth</div>
+                <div className="text-sm font-medium text-gray-700 text-center">Annotation</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Type</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-6">Value</div>
@@ -711,44 +683,26 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               </div>
             )}
 
-          {/* Flatten parameters and their tuple components for rendering */}
-          {(() => {
-            const flattenedRows: Array<{
-              parameter: Parameter
-              depth: number
-            }> = []
-
-            const addParameterWithComponents = (param: Parameter, depth: number = 0) => {
-              // Add the main parameter
-              flattenedRows.push({
-                parameter: param,
-                depth
-              })
-
-              // Add array components if this is an array (treat arrays like tuples)
-              if (isStructuredType(param.type) && param.components) {
-                param.components.forEach(component => {
-                  addParameterWithComponents(component, depth + 1)
-                })
-              }
-            }
-
-            transactionData.parameters.forEach(param => {
-              addParameterWithComponents(param)
-            })
-
-            return flattenedRows.map(({ parameter, depth }) => (
+          {/* Render parameters - ParameterInput handles recursive rendering */}
+          {transactionData.parameters.map(parameter => (
+            <div key={parameter.id} className={`border rounded-lg p-4 ${
+              validationState.parameters[parameter.id] && !validationState.parameters[parameter.id].isValid && parameter.value.trim()
+                ? 'border-red-300 bg-red-50'
+                : 'border-gray-200 bg-gray-50'
+            }`}>
               <ParameterInput
-                key={parameter.id}
                 parameter={parameter}
-                depth={depth}
+                annotation="1"
                 validation={validationState.parameters[parameter.id]}
                 onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
                 onRemove={() => removeParameter(parameter.id)}
                 onAddComponent={() => addComponentTo(parameter.id)}
+                onUpdateComponent={(componentId, field, value) => updateParameter(componentId, field, value)}
+                onRemoveComponent={(componentId) => removeParameter(componentId)}
+                onAddComponentTo={(componentId) => addComponentTo(componentId)}
               />
-            ))
-          })()}
+            </div>
+          ))}
 
           <Button
             onClick={addParameter}
