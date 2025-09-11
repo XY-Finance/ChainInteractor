@@ -370,6 +370,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       targetAddress: example.targetAddress,
       parameters
     })
+    console.log('parameters', parameters);
   }, [])
 
   // Encode function data
@@ -382,7 +383,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     setIsEncoding(true)
 
     try {
-      // Recursive function to build ABI inputs with tuple support
+      // Recursive function to build ABI inputs with tuple and array support
       const buildAbiInputs = (params: Parameter[]) => {
         return params.map(p => {
           const input: any = {
@@ -390,8 +391,30 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             type: p.type
           }
 
+          // Handle tuple types
           if (p.type === 'tuple' && p.components && p.components.length > 0) {
             input.components = buildAbiInputs(p.components)
+          }
+
+          // Handle array types
+          if (p.type === 'array' && p.components && p.components.length > 0) {
+            const elementType = p.components[0]
+
+            // Recursive function to get array type
+            const getArrayType = (param: Parameter): string => {
+              if (param.type === 'array' && param.components && param.components.length > 0) {
+                return getArrayType(param.components[0]) + '[]'
+              } else {
+                return param.type
+              }
+            }
+
+            input.type = getArrayType(elementType)
+
+            // If the final element type is a tuple, we need to add components
+            if (elementType.type === 'tuple' && elementType.components) {
+              input.components = buildAbiInputs(elementType.components)
+            }
           }
 
           return input
