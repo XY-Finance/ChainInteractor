@@ -1,28 +1,16 @@
 'use client'
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
-import { encodeFunctionData, type Address, isAddress } from 'viem'
+import { encodeFunctionData, isAddress } from 'viem'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
-import { isStructuredType } from '../utils/typeUtils'
 
-export interface Parameter {
-  id: string
-  name: string
-  type: string
-  value: string
-  components?: Parameter[] // For tuple types
-}
-
-export interface TransactionData {
-  functionName: string
-  targetAddress: string
-  parameters: Parameter[]
-}
+// Simplified state - just maintain ABI and data array
+// UI parameters are derived from these for interaction
 
 interface ValidationState {
   functionName: { isValid: boolean; message: string }
@@ -30,9 +18,6 @@ interface ValidationState {
   parameters: { [id: string]: { isValid: boolean; message: string } }
 }
 
-interface TransactionBuilderProps {
-  // No props needed
-}
 
 // Validation functions
 const validateFunctionName = (name: string): { isValid: boolean; message: string } => {
@@ -55,34 +40,16 @@ const validateAddress = (address: string): { isValid: boolean; message: string }
   return { isValid: true, message: '' }
 }
 
-// Helper functions for structured types (arrays and tuples) - now imported from utils
-
-const validateParameter = (parameter: Parameter): { isValid: boolean; message: string } => {
-  if (!parameter.value.trim()) {
-    return { isValid: false, message: 'Parameter value is required' }
+const validateDataValue = (input: any, value: any): { isValid: boolean; message: string } => {
+  if (value === undefined || value === null || value === '') {
+    return { isValid: false, message: 'Value is required' }
   }
 
-  // Type-specific validation
-  const value = parameter.value.trim()
+  const stringValue = String(value).trim()
 
-  // Handle all types in a unified switch statement
-  switch (parameter.type) {
-    case 'array':
-    case 'tuple':
-      if (parameter.components && parameter.components.length > 0) {
-          for (let i = 0; i < parameter.components.length; i++) {
-            const componentValidation = validateParameter({
-              ...parameter.components[i],
-              value: String(parameter.components[i].value)
-            })
-            if (!componentValidation.isValid) {
-              return { isValid: false, message: `Child parameter is invalid` }
-            }
-          }
-      }
-      return { isValid: true, message: '' }
+  switch (input.type) {
     case 'address':
-      if (!isAddress(value)) {
+      if (!isAddress(stringValue)) {
         return { isValid: false, message: 'Invalid address format' }
       }
       break
@@ -92,7 +59,7 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
     case 'uint32':
     case 'uint16':
     case 'uint8':
-      if (!/^\d+$/.test(value) || BigInt(value) < 0n) {
+      if (!/^\d+$/.test(stringValue) || BigInt(stringValue) < 0n) {
         return { isValid: false, message: 'Must be a positive integer' }
       }
       break
@@ -102,12 +69,12 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
     case 'int32':
     case 'int16':
     case 'int8':
-      if (!/^-?\d+$/.test(value)) {
+      if (!/^-?\d+$/.test(stringValue)) {
         return { isValid: false, message: 'Must be an integer' }
       }
       break
     case 'bool':
-      if (!['true', 'false'].includes(value.toLowerCase())) {
+      if (!['true', 'false'].includes(stringValue.toLowerCase())) {
         return { isValid: false, message: 'Must be "true" or "false"' }
       }
       break
@@ -118,13 +85,22 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
     case 'bytes4':
     case 'bytes2':
     case 'bytes1':
-      if (!/^0x[0-9a-fA-F]*$/.test(value)) {
+      if (!/^0x[0-9a-fA-F]*$/.test(stringValue)) {
         return { isValid: false, message: 'Must be hex format (0x...)' }
       }
       break
+    case 'string':
+      if (!stringValue) {
+        return { isValid: false, message: 'String value is required' }
+      }
+      break
     default:
-      // For any other types, just validate that value is not empty
-      if (!value) {
+      if (input.type.endsWith('[]') || input.type === 'tuple') {
+        // For arrays and tuples, just check if value exists
+        if (!value) {
+          return { isValid: false, message: 'Value is required' }
+        }
+      } else if (!stringValue) {
         return { isValid: false, message: 'Value is required' }
       }
       break
@@ -133,14 +109,15 @@ const validateParameter = (parameter: Parameter): { isValid: boolean; message: s
   return { isValid: true, message: '' }
 }
 
+
 const TransactionBuilder = React.memo(function TransactionBuilder() {
   const { currentAccount, sendTransaction, publicClient } = useWalletManager()
 
-  const [transactionData, setTransactionData] = useState<TransactionData>({
-    functionName: '',
-    targetAddress: '',
-    parameters: []
-  })
+  // Core state - maintain ABI and dataArray for viem.encodeFunctionData
+  const [abi, setAbi] = useState<any[]>([])
+  const [dataArray, setDataArray] = useState<any[]>([])
+  const [functionName, setFunctionName] = useState<string>('')
+  const [targetAddress, setTargetAddress] = useState<string>('')
 
   const [isEncoding, setIsEncoding] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -151,23 +128,39 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   const [encodedData, setEncodedData] = useState<string>('')
   const [transactionHash, setTransactionHash] = useState<string>('')
   const [callResult, setCallResult] = useState<{ success: boolean; data: string; message: string } | null>(null)
+  const [isEncodedDataInSync, setIsEncodedDataInSync] = useState<boolean>(false)
+
+  // Clear call result and mark encoded data as out of sync when function name or parameters change
+  useEffect(() => {
+    if (callResult) {
+      setCallResult(null)
+    }
+    if (encodedData) {
+      setIsEncodedDataInSync(false)
+    }
+  }, [functionName, abi, dataArray])
 
   // Validation state
   const validationState = useMemo((): ValidationState => {
-    const functionNameValidation = validateFunctionName(transactionData.functionName)
-    const targetAddressValidation = validateAddress(transactionData.targetAddress)
+    const functionNameValidation = validateFunctionName(functionName)
+    const targetAddressValidation = validateAddress(targetAddress)
 
+    // Validate parameters
     const parametersValidation: { [id: string]: { isValid: boolean; message: string } } = {}
-    transactionData.parameters.forEach(param => {
-      parametersValidation[param.id] = validateParameter(param)
-    })
+
+    if (abi.length > 0 && abi[0]?.inputs) {
+      abi[0].inputs.forEach((input: any, index: number) => {
+        const value = dataArray[index]
+        parametersValidation[`param-${index}`] = validateDataValue(input, value)
+      })
+    }
 
     return {
       functionName: functionNameValidation,
       targetAddress: targetAddressValidation,
       parameters: parametersValidation
     }
-  }, [transactionData])
+  }, [functionName, targetAddress, abi, dataArray])
 
     // Check if all inputs are valid (for encoding - target address not required)
   const isAllValid = useMemo(() => {
@@ -222,329 +215,158 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     return `${baseUrl}${hash}`
   }, [publicClient])
 
+  // Update dataArray value at specific index
+  const updateDataValue = useCallback((index: number, newValue: any) => {
+    setDataArray(prev => {
+      const newArray = [...prev]
+      newArray[index] = newValue
+      return newArray
+    })
+  }, [])
+
   // Add a new parameter
   const addParameter = useCallback(() => {
-    const newParameter: Parameter = {
-      id: Date.now().toString(),
-      name: '',
-      type: 'address',
-      value: ''
+    const newInput = {
+      name: `param${abi.length > 0 ? abi[0].inputs.length : 0}`,
+      type: 'address'
     }
 
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: [...prev.parameters, newParameter]
-    }))
-  }, [])
-
-  // Helper function to find parameter by ID recursively
-  const findParameterById = useCallback((parameters: Parameter[], id: string): Parameter | null => {
-    for (const param of parameters) {
-      if (param.id === id) {
-        return param
-      }
-      if (param.components) {
-        const found = findParameterById(param.components, id)
-        if (found) return found
-      }
-    }
-    return null
-  }, [])
-
-  // Add a new component to a parameter
-  const addComponentTo = useCallback((parameterId: string) => {
-    setTransactionData(prev => {
-      const newData = { ...prev }
-      const parameter = findParameterById(newData.parameters, parameterId)
-
-      if (parameter) {
-        const newComponent: Parameter = {
-          id: Date.now().toString() + Math.random(),
-          name: '',
-          type: 'address',
-          value: ''
+    setAbi(prev => {
+      if (prev.length === 0) {
+        // Create new ABI function
+        return [{
+          type: 'function',
+          name: functionName || 'newFunction',
+          stateMutability: 'nonpayable',
+          inputs: [newInput],
+          outputs: []
+        }]
+      } else {
+        // Add to existing ABI
+        const newAbi = [...prev]
+        newAbi[0] = {
+          ...newAbi[0],
+          inputs: [...newAbi[0].inputs, newInput]
         }
-        parameter.components = [...(parameter.components || []), newComponent]
+        return newAbi
       }
-
-      return newData
     })
-  }, [findParameterById])
 
+    setDataArray(prev => [...prev, ''])
+  }, [abi, functionName])
 
   // Remove a parameter
-  const removeParameter = useCallback((id: string, parentId?: string) => {
-    setTransactionData(prev => {
-      const newData = { ...prev }
-
-      // Helper function to remove component recursively
-      const removeComponent = (parameters: Parameter[]): Parameter[] => {
-        return parameters.filter(param => {
-          if (param.id === id) {
-            return false // Remove this parameter
-          }
-          if (param.components) {
-            param.components = removeComponent(param.components)
-          }
-          return true // Keep this parameter
-        })
+  const removeParameter = useCallback((index: number) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+      newAbi[0] = {
+        ...newAbi[0],
+        inputs: newAbi[0].inputs.filter((_: any, i: number) => i !== index)
       }
+      return newAbi
+    })
 
-      newData.parameters = removeComponent(newData.parameters)
-      return newData
+    setDataArray(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
+  // Update parameter name
+  const updateParameterName = useCallback((index: number, newName: string) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+      newAbi[0] = {
+        ...newAbi[0],
+        inputs: newAbi[0].inputs.map((input: any, i: number) =>
+          i === index ? { ...input, name: newName } : input
+        )
+      }
+      return newAbi
     })
   }, [])
 
-  // Update parameter
-  const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
-    setTransactionData(prev => {
-      const newData = { ...prev }
-      const parameter = findParameterById(newData.parameters, id)
-
-      if (parameter) {
-        if (field === 'components') {
-          try {
-            const components = JSON.parse(value)
-            parameter.components = components
-          } catch {
-            // Invalid JSON, keep existing components
-          }
-        } else if (field === 'type') {
-          // Initialize structured components when type is changed to a structured type
-          if (isStructuredType(value) && !parameter.components) {
-            parameter.components = []
-          }
-          // Clear components when switching from structured to non-structured
-          else if (isStructuredType(parameter.type) && !isStructuredType(value)) {
-            parameter.components = undefined
-          }
-          parameter[field] = value
-        } else {
-          parameter[field] = value
-        }
+  // Update parameter type
+  const updateParameterType = useCallback((index: number, newType: string) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+      newAbi[0] = {
+        ...newAbi[0],
+        inputs: newAbi[0].inputs.map((input: any, i: number) =>
+          i === index ? { ...input, type: newType } : input
+        )
       }
-
-      return newData
+      return newAbi
     })
-  }, [findParameterById])
 
-  // Update function name
-  const updateFunctionName = useCallback((functionName: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      functionName
-    }))
+    // Reset data value when type changes
+    setDataArray(prev => {
+      const newArray = [...prev]
+      newArray[index] = ''
+      return newArray
+    })
   }, [])
 
-  // Update target address
-  const updateTargetAddress = useCallback((targetAddress: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      targetAddress
-    }))
-  }, [])
-
-  // Load example transaction
+  // Load example ABI transaction
   const loadExample = useCallback((example: any) => {
-    // Helper function to recursively create parameters with components
-    const createParameter = (p: any): Parameter => {
-      const parameter: Parameter = {
-        id: Date.now().toString() + Math.random(),
-        name: p.name,
-        type: p.type,
-        value: p.value
-      }
+    const abiFunction = example.abi[0]
 
-      // Add components if they exist
-      if (p.components && p.components.length > 0) {
-        parameter.components = p.components.map((comp: any) => createParameter(comp))
-      }
+    setFunctionName(abiFunction.name)
+    setTargetAddress(example.targetAddress)
+    setAbi(example.abi)
+    setDataArray(example.data)
 
-      return parameter
+    console.log('Loaded ABI example:', { abiFunction, dataArray: example.data })
+  }, [])
+
+  // Encode function data using the ABI structure
+  const encodeData = useCallback(async () => {
+    if (!isAllValid) {
+      return
     }
 
-    const parameters = example.parameters.map((p: any) => createParameter(p))
-
-    setTransactionData({
-      functionName: example.functionName,
-      targetAddress: example.targetAddress,
-      parameters
-    })
-    console.log('parameters', parameters);
-  }, [])
-
-  // Encode function data
-  const encodeData = useCallback(async () => {
-
-    if (!isAllValid) {
+    if (!functionName || !abi[0] || !dataArray.length) {
       return
     }
 
     setIsEncoding(true)
 
     try {
-      // Recursive function to build ABI inputs with tuple and array support
-      const buildAbiInputs = (params: Parameter[]) => {
-        return params.map(p => {
-          const input: any = {
-            name: p.name,
-            type: p.type
-          }
-
-          // Handle tuple types
-          if (p.type === 'tuple' && p.components && p.components.length > 0) {
-            input.components = buildAbiInputs(p.components)
-          }
-
-          // Handle array types
-          if (p.type === 'array' && p.components && p.components.length > 0) {
-            const elementType = p.components[0]
-
-            // Recursive function to get array type
-            const getArrayType = (param: Parameter): string => {
-              if (param.type === 'array' && param.components && param.components.length > 0) {
-                return getArrayType(param.components[0]) + '[]'
-              } else {
-                return param.type
-              }
-            }
-
-            input.type = getArrayType(elementType)
-
-            // If the final element type is a tuple, we need to add components
-            if (elementType.type === 'tuple' && elementType.components) {
-              input.components = buildAbiInputs(elementType.components)
-            }
-          }
-
-          return input
-        })
-      }
-
-      // Create ABI item object
+      // Create ABI item with the current function name
       const abiItem = {
-        inputs: buildAbiInputs(transactionData.parameters),
-        name: transactionData.functionName,
-        outputs: [], // TODO: We'll assume no outputs for now, can be enhanced later
-        stateMutability: 'nonpayable', // TODO: Default to nonpayable, can be enhanced later
-        type: 'function'
+        ...abi[0],
+        name: functionName
       }
 
+      // Filter out empty values and validate before encoding
+      const validDataArray = dataArray.map((value, index) => {
+        const input = abi[0].inputs[index]
+        if (!input) return value
 
-      // Recursive function to encode values with tuple and array support
-      const encodeValues = (params: Parameter[]): any[] => {
-        return params.map(p => {
-          const value = p.value.trim()
-
-          // Handle structured types (arrays and tuples) - treat them identically
-          if (isStructuredType(p.type)) {
-            try {
-              const structuredValue = JSON.parse(value)
-
-              // For arrays, expect an array; for tuples, expect an object
-              if (p.type === 'array') {
-                if (!Array.isArray(structuredValue)) {
-                  throw new Error(`Expected array for parameter ${p.name}`)
-                }
-              } else {
-                if (typeof structuredValue !== 'object' || Array.isArray(structuredValue)) {
-                  throw new Error(`Expected object for parameter ${p.name}`)
-                }
-              }
-
-              // Encode each component/element
-              if (p.components && p.components.length > 0) {
-                if (p.type === 'array') {
-                  // For arrays, encode each element
-                  return structuredValue.map((item: any, index: number) => {
-                    const encodedElement: any[] = encodeValues(p.components!).map((_: any, compIndex: number) => {
-                      const componentValue = item[compIndex]
-                      if (componentValue === undefined) {
-                        throw new Error(`Missing element ${compIndex} in array ${p.name}`)
-                      }
-                      return encodeSingleValue(p.components![compIndex], componentValue)
-                    })
-                    return encodedElement
-                  })
-                } else {
-                  // For tuples, encode as array of values
-                  return encodeValues(p.components).map((_: any, compIndex: number) => {
-                    const componentValue = structuredValue[p.components![compIndex].name]
-                    if (componentValue === undefined) {
-                      throw new Error(`Missing component ${p.components![compIndex].name} in tuple ${p.name}`)
-                    }
-                    return encodeSingleValue(p.components![compIndex], componentValue)
-                  })
-                }
-              }
-            } catch (error) {
-              throw new Error(`Invalid ${p.type === 'array' ? 'array' : 'tuple'} format for parameter ${p.name}: ${error instanceof Error ? error.message : String(error)}`)
-            }
-          }
-
-
-          return encodeSingleValue(p, value)
-        })
-      }
-
-      // Helper function to encode a single value
-      const encodeSingleValue = (param: Parameter, value: any) => {
-        const stringValue = String(value).trim()
-
-        switch (param.type) {
-          case 'address':
-            if (!isAddress(stringValue)) {
-              throw new Error(`Invalid address format for parameter ${param.name}`)
-            }
-            return stringValue as Address
-          case 'uint256':
-          case 'uint':
-          case 'uint8':
-          case 'uint16':
-          case 'uint32':
-          case 'uint64':
-          case 'uint128':
-            return BigInt(stringValue)
-          case 'int256':
-          case 'int':
-          case 'int8':
-          case 'int16':
-          case 'int32':
-          case 'int64':
-          case 'int128':
-            return BigInt(stringValue)
-          case 'bool':
-            return stringValue === 'true'
-          case 'string':
-          case 'bytes':
-          case 'bytes32':
-          case 'bytes16':
-          case 'bytes8':
-          case 'bytes4':
-          case 'bytes2':
-          case 'bytes1':
-            return stringValue
-          default:
-            return stringValue
+        // Skip empty values for required fields
+        if (value === '' || value === null || value === undefined) {
+          throw new Error(`Parameter ${index} (${input.name}) is required but empty`)
         }
-      }
 
-      // Prepare values for encoding
-      const values = encodeValues(transactionData.parameters)
+        return value
+      })
 
-      // Encode the function data
+      // Use filtered dataArray - it's already in the correct format for viem
       const encodedData = encodeFunctionData({
         abi: [abiItem],
-        args: values
+        args: validDataArray
       })
 
       setEncodedData(encodedData)
+      setIsEncodedDataInSync(true)
     } catch (error) {
       console.error('Encoding error:', error)
+      setEncodedData('')
+      setIsEncodedDataInSync(false)
     } finally {
       setIsEncoding(false)
     }
-  }, [transactionData, isAllValid])
+  }, [functionName, abi, dataArray, isAllValid])
 
   // Send transaction
   const sendTransactionData = useCallback(async () => {
@@ -556,7 +378,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
-    if (!transactionData.targetAddress.trim()) {
+    if (!targetAddress.trim()) {
       return
     }
 
@@ -565,7 +387,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     try {
       // Create transaction object
       const tx = {
-        to: transactionData.targetAddress as `0x${string}`,
+        to: targetAddress as `0x${string}`,
         data: encodedData,
         value: 0n
       }
@@ -578,7 +400,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsSending(false)
     }
-  }, [currentAccount, encodedData, transactionData.targetAddress, sendTransaction])
+  }, [currentAccount, encodedData, targetAddress, sendTransaction])
 
   // Eth call function
   const callTransaction = useCallback(async () => {
@@ -586,7 +408,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
-    if (!transactionData.targetAddress.trim()) {
+    if (!targetAddress.trim()) {
       return
     }
 
@@ -599,14 +421,23 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
+
     setIsCalling(true)
 
     try {
-      // Create call object
+      // Ensure we have a valid address
+      if (!currentAccount?.address) {
+        throw new Error('No connected wallet address available')
+      }
+
+      console.log('Eth call from address:', currentAccount.address)
+
+      // Create call object with connected address as from
       const callData = {
-        to: transactionData.targetAddress as `0x${string}`,
+        to: targetAddress as `0x${string}`,
         data: encodedData as `0x${string}`,
-        value: 0n
+        value: 0n,
+        account: currentAccount.address as `0x${string}`
       }
 
       // Perform actual eth_call
@@ -648,7 +479,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsCalling(false)
     }
-  }, [encodedData, transactionData.targetAddress, publicClient])
+  }, [encodedData, targetAddress, publicClient, currentAccount])
 
   return (
     <div className="space-y-6">
@@ -662,29 +493,29 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             <input
               id="functionName"
               type="text"
-              value={transactionData.functionName}
-              onChange={(e) => updateFunctionName(e.target.value)}
+              value={functionName}
+              onChange={(e) => setFunctionName(e.target.value)}
               placeholder="e.g., transfer, approve, mint"
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent ${
-                transactionData.functionName.trim()
+                functionName.trim()
                   ? validationState.functionName.isValid
                     ? 'border-green-300 focus:ring-green-500'
                     : 'border-red-300 focus:ring-red-500'
                   : 'border-gray-300 focus:ring-blue-500'
               }`}
             />
-            {transactionData.functionName.trim() && !validationState.functionName.isValid && (
+            {functionName.trim() && !validationState.functionName.isValid && (
               <p className="mt-1 text-sm text-red-600">{validationState.functionName.message}</p>
             )}
           </div>
         </div>
       </Card>
 
-      {/* Parameters */}
-      <Card title="Function Parameters" subtitle="Add and configure function parameters">
-        <div className="space-y-4">
-                      {/* Column headers - only show when there are parameters */}
-            {transactionData.parameters.length > 0 && (
+        {/* Parameters */}
+        <Card title="Function Parameters" subtitle="Configure function parameters">
+          <div className="space-y-4">
+            {/* Column headers - only show when there are parameters */}
+            {abi[0]?.inputs && abi[0].inputs.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
                 <div className="text-sm font-medium text-gray-700 text-center">Annotation</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
@@ -694,36 +525,36 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               </div>
             )}
 
-          {/* Render parameters - ParameterInput handles recursive rendering */}
-          {transactionData.parameters.map(parameter => (
-            <div key={parameter.id} className={`border rounded-lg p-4 ${
-              validationState.parameters[parameter.id] && !validationState.parameters[parameter.id].isValid && parameter.value.trim()
-                ? 'border-red-300 bg-red-50'
-                : 'border-gray-200 bg-gray-50'
-            }`}>
-              <ParameterInput
-                parameter={parameter}
-                annotation="1"
-                validation={validationState.parameters[parameter.id]}
-                onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
-                onRemove={() => removeParameter(parameter.id)}
-                onAddComponent={() => addComponentTo(parameter.id)}
-                onUpdateComponent={(componentId, field, value) => updateParameter(componentId, field, value)}
-                onRemoveComponent={(componentId) => removeParameter(componentId)}
-                onAddComponentTo={(componentId) => addComponentTo(componentId)}
-              />
-            </div>
-          ))}
+            {/* Render parameters - ParameterInput handles recursive rendering */}
+            {abi[0]?.inputs && abi[0].inputs.map((input: any, index: number) => (
+              <div key={`${input.name}-${index}`} className={`border rounded-lg p-4 ${
+                validationState.parameters[`param-${index}`] && !validationState.parameters[`param-${index}`].isValid && dataArray[index]
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-gray-200 bg-gray-50'
+              }`}>
+                <ParameterInput
+                  abiInput={input}
+                  dataValue={dataArray[index]}
+                  validation={validationState.parameters[`param-${index}`]}
+                  onUpdate={(newValue) => updateDataValue(index, newValue)}
+                  onRemove={() => removeParameter(index)}
+                  onUpdateName={(newName) => updateParameterName(index, newName)}
+                  onUpdateType={(newType) => updateParameterType(index, newType)}
+                  annotation="1"
+                  index={index}
+                />
+              </div>
+            ))}
 
-          <Button
-            onClick={addParameter}
-            variant="outline"
-            className="w-full"
-          >
-            ➕ Add Parameter
-          </Button>
-        </div>
-      </Card>
+            <Button
+              onClick={addParameter}
+              variant="outline"
+              className="w-full"
+            >
+              ➕ Add Parameter
+            </Button>
+          </div>
+        </Card>
 
       {/* Action Buttons */}
       <Card title="Transaction Actions" subtitle={`Encode and execute your transaction${publicClient?.chain?.name ? ` on ${publicClient.chain.name}` : ''}`}>
@@ -739,9 +570,11 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               🔧 Encode Data {!isAllValid ? '(Fix validation errors)' : ''}
             </Button>
             {encodedData && (
-              <div className="bg-gray-100 p-3 rounded-md">
+              <div className={`p-3 rounded-md ${isEncodedDataInSync ? 'bg-gray-100' : 'bg-yellow-50 border border-yellow-200'}`}>
                 <div className="flex justify-between items-center mb-1">
-                  <div className="text-sm font-medium text-gray-700">Encoded Data:</div>
+                  <div className={`text-sm font-medium ${isEncodedDataInSync ? 'text-gray-700' : 'text-yellow-700'}`}>
+                    Encoded Data: {!isEncodedDataInSync && <span className="text-yellow-600">(Out of Sync)</span>}
+                  </div>
                   <Button
                     onClick={() => copyToClipboard(encodedData)}
                     loading={isCopying}
@@ -752,7 +585,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     📋 Copy
                   </Button>
                 </div>
-                <div className="text-xs font-mono text-gray-600 break-all">{encodedData}</div>
+                <div className={`text-xs font-mono break-all ${isEncodedDataInSync ? 'text-gray-600' : 'text-yellow-600'}`}>{encodedData}</div>
               </div>
             )}
           </div>
@@ -763,17 +596,17 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               Target Contract Address
             </label>
             <AddressSelector
-              value={transactionData.targetAddress}
-              onChange={updateTargetAddress}
+              value={targetAddress}
+              onChange={setTargetAddress}
               placeholder="Select contract address..."
-              className={transactionData.targetAddress.trim()
+              className={targetAddress.trim()
                 ? validationState.targetAddress.isValid
                   ? 'border-green-300 focus:ring-green-500'
                   : 'border-red-300 focus:ring-red-500'
                 : ''
               }
             />
-            {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
+            {targetAddress.trim() && !validationState.targetAddress.isValid && (
               <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
             )}
           </div>
@@ -785,7 +618,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               <Button
                 onClick={callTransaction}
                 loading={isCalling}
-                disabled={!encodedData || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                disabled={!encodedData || !targetAddress.trim() || !validationState.targetAddress.isValid || !currentAccount}
                 variant="outline"
                 className="w-full"
               >
@@ -808,7 +641,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               <Button
                 onClick={sendTransactionData}
                 loading={isSending}
-                disabled={!encodedData || !currentAccount || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                disabled={!encodedData || !currentAccount || !targetAddress.trim() || !validationState.targetAddress.isValid}
                 variant="success"
                 className="w-full"
               >
@@ -844,7 +677,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         </div>
       </Card>
 
-      {/* Example Transactions */}
+      {/* Example ABI Transactions */}
       <ExampleTransactions onLoadExample={loadExample} />
     </div>
   )

@@ -22,6 +22,37 @@ interface TypeSelectorProps {
   disabled?: boolean
 }
 
+// Helper functions for array dimensions
+const getBaseType = (type: string): string => {
+  // Remove all [] from the end
+  let result = type.trim()
+
+  // Keep removing [] until none are left
+  while (result.match(/\[\]$/)) {
+    result = result.replace(/\[\]$/, '').trim()
+  }
+
+  return result
+}
+
+const getArrayDimension = (type: string): number => {
+  // Count [] at the end
+  let result = type.trim()
+  let dimension = 0
+
+  // Keep counting and removing [] until none are left
+  while (result.match(/\[\]$/)) {
+    result = result.replace(/\[\]$/, '').trim()
+    dimension++
+  }
+
+  return dimension
+}
+
+const setArrayDimension = (baseType: string, dimension: number): string => {
+  return baseType + '[]'.repeat(dimension)
+}
+
 // Solidity types organized by category
 const SOLIDITY_TYPES: TypeItem[] = [
   // Address types
@@ -60,7 +91,6 @@ const SOLIDITY_TYPES: TypeItem[] = [
 
   // Structured types
   { type: 'tuple', category: 'Structured' },
-  { type: 'array', category: 'Structured' },
 ]
 
 
@@ -142,11 +172,14 @@ export default function TypeSelector({
   }, {} as Record<string, TypeItem[]>)
 
   const handleSelect = useCallback((type: string) => {
-    onChange(type)
+    // When selecting a base type, preserve the current array dimension
+    const currentDimension = getArrayDimension(value)
+    const newType = setArrayDimension(type, currentDimension)
+    onChange(newType)
     setIsOpen(false)
     setSearchTerm('')
     setSelectedIndex(-1)
-  }, [onChange])
+  }, [onChange, value])
 
   // Use shared keyboard navigation hook
   const { handleSearchKeyDown } = useKeyboardNavigation({
@@ -211,42 +244,70 @@ export default function TypeSelector({
     : null
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
-      {/* Trigger Button */}
-      <button
-        type="button"
-        onClick={handleToggle}
-        disabled={disabled}
-        className={`w-full px-3 py-2 text-left border rounded-md focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${
-          disabled
-            ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-            : 'bg-white border-gray-300 hover:border-gray-400 focus:ring-blue-500'
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            {value ? (
-              <span className="truncate text-gray-900 font-mono text-sm">
-                {value}
-              </span>
-            ) : (
-              <span className="text-gray-500 text-sm">{placeholder}</span>
-            )}
-          </div>
-          <svg
-            className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0 ml-2`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+    <div className={`${className}`} ref={dropdownRef}>
+      {disabled ? (
+        /* Disabled: Simple grayed-out display */
+        <div className="w-full px-2 py-1.5 border border-gray-200 rounded-md bg-gray-50">
+          <span className="text-gray-500 font-mono text-sm">
+            {value || placeholder}
+          </span>
         </div>
-      </button>
+      ) : (
+        /* Enabled: Full interactive controls */
+        <div className="flex gap-2 items-end">
+          {/* Type Selector */}
+          <div className="flex-1 relative max-w-[200px]">
+            <button
+              type="button"
+              onClick={handleToggle}
+              className="w-full px-2 py-1.5 text-left border rounded-md focus:outline-none focus:ring-2 focus:border-transparent transition-colors bg-white border-gray-300 hover:border-gray-400 focus:ring-blue-500"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  {value ? (
+                    <span className="truncate text-gray-900 font-mono text-sm">
+                      {getBaseType(value)}
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 text-sm">{placeholder}</span>
+                  )}
+                </div>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''} flex-shrink-0 ml-2`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+          </div>
+
+          {/* Array Dimension Selector */}
+          <div className="flex flex-col items-center">
+            <select
+              value={getArrayDimension(value)}
+              onChange={(e) => {
+                const newDimension = parseInt(e.target.value)
+                onChange(setArrayDimension(getBaseType(value), newDimension))
+              }}
+              className="px-2 py-1.5 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-[60px]"
+              title="Array dimensions"
+            >
+              {Array.from({ length: 9 }, (_, i) => (
+                <option key={i} value={i}>
+                  {`${i}[]`}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Dropdown */}
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
+      {isOpen && !disabled && (
+        <div className="absolute z-50 mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden" style={{ width: '200px' }}>
           {/* Search Input */}
           <div className="p-2 border-b border-gray-200 relative">
             <input
