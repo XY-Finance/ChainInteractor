@@ -18,6 +18,9 @@ interface ParameterInputProps {
   onRemove?: () => void
   onUpdateName?: (newName: string) => void
   onUpdateType?: (newType: string) => void
+  onAddTupleComponent?: (componentName: string, componentType: string) => void
+  onUpdateTupleComponentType?: (componentName: string, newType: string) => void
+  onRemoveTupleComponent?: (componentIndex: number) => void
   annotation?: string
   index?: number
   disabled?: boolean
@@ -66,6 +69,9 @@ const ParameterInput = React.memo(function ParameterInput({
   onRemove,
   onUpdateName,
   onUpdateType,
+  onAddTupleComponent,
+  onUpdateTupleComponentType,
+  onRemoveTupleComponent,
   annotation = "1",
   index = 0,
   disabled = false
@@ -262,15 +268,19 @@ const ParameterInput = React.memo(function ParameterInput({
     }
   }
 
+
   // Handle tuple operations
   const handleTupleAdd = () => {
-    if (abiInput.components) {
-      const newTuple: any = {}
+    const newTuple = { [""]: getDefaultValueForType("address") }
+    if (abiInput?.components) {
       abiInput.components.forEach(comp => {
-        newTuple[comp.name] = getDefaultValueForType(comp.type)
+        (newTuple as Record<string, any>)[comp.name] = getDefaultValueForType(comp.type)
       })
-      onUpdate(newTuple)
     }
+    if (onAddTupleComponent) {
+      onAddTupleComponent("", "address")
+    }
+    onUpdate(newTuple)
   }
 
   const handleTupleUpdate = (componentName: string, newValue: any) => {
@@ -306,7 +316,22 @@ const ParameterInput = React.memo(function ParameterInput({
         <div className="md:col-span-2">
           <TypeSelector
             value={abiInput.type}
-            onChange={onUpdateType || (() => {})}
+            onChange={(newType) => {
+              console.log('TypeSelector onChange called:', { newType, disabled, hasOnUpdateType: !!onUpdateType })
+
+              // Special handling for array types - preserve data when changing element type
+              if (onUpdateType && abiInput.type.endsWith('[]') && newType.endsWith('[]') && Array.isArray(dataValue)) {
+                console.log('Array type change detected, preserving data')
+                const preservedData = [...dataValue]
+                onUpdateType(newType)
+                // Restore data after type change
+                Promise.resolve().then(() => {
+                  onUpdate(preservedData)
+                })
+              } else if (onUpdateType) {
+                onUpdateType(newType)
+              }
+            }}
             placeholder="Select type..."
             className="text-sm"
             disabled={disabled}
@@ -469,15 +494,17 @@ const ParameterInput = React.memo(function ParameterInput({
             const componentValue = dataValue[component.name]
 
             return (
-              <div key={component.name} className="ml-2 border-l-2 border-gray-200 pl-2">
+              <div key={`${component.name || 'unnamed'}-${index}`} className="ml-2 border-l-2 border-gray-200 pl-2">
                 <ParameterInput
                   abiInput={component}
                   dataValue={componentValue}
                   validation={validation}
                   onUpdate={(newValue) => handleTupleUpdate(component.name, newValue)}
+                  onRemove={() => onRemoveTupleComponent?.(index)}
+                  onUpdateType={(newType) => onUpdateTupleComponentType?.(component.name, newType)}
                   annotation={componentAnnotation}
                   index={index}
-                  disabled={true}
+                  disabled={false}
                 />
               </div>
             )

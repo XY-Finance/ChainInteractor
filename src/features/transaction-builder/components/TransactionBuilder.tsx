@@ -307,6 +307,66 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     })
   }, [])
 
+  // Add tuple component to ABI structure
+  const addTupleComponent = useCallback((parameterIndex: number, componentName: string, componentType: string) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+      if (!newAbi[0].inputs[parameterIndex].components) {
+        newAbi[0].inputs[parameterIndex].components = []
+      }
+      newAbi[0].inputs[parameterIndex].components.push({
+        name: componentName,
+        type: componentType
+      })
+      return newAbi
+    })
+  }, [])
+
+  // Update tuple component type in ABI structure
+  const updateTupleComponentType = useCallback((parameterIndex: number, componentName: string, newType: string) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+      if (newAbi[0].inputs[parameterIndex].components) {
+        newAbi[0].inputs[parameterIndex].components = newAbi[0].inputs[parameterIndex].components.map((comp: any) =>
+          comp.name === componentName ? { ...comp, type: newType } : comp
+        )
+      }
+      return newAbi
+    })
+  }, [])
+
+  // Remove tuple component from ABI structure
+  const removeTupleComponent = useCallback((parameterIndex: number, componentIndex: number) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+
+      if (newAbi[0].inputs[parameterIndex]?.components) {
+        newAbi[0].inputs[parameterIndex].components = newAbi[0].inputs[parameterIndex].components.filter((_: any, i: number) =>
+          i !== componentIndex
+        )
+      }
+      return newAbi
+    })
+
+    // Also remove the corresponding data value
+    setDataArray(prev => {
+      const newArray = [...prev]
+
+      if (typeof newArray[parameterIndex] === 'object' && newArray[parameterIndex] !== null) {
+        const newTuple = { ...newArray[parameterIndex] }
+        const componentName = abi[0]?.inputs[parameterIndex]?.components?.[componentIndex]?.name
+        if (componentName) {
+          delete newTuple[componentName]
+        }
+        newArray[parameterIndex] = newTuple
+      }
+      return newArray
+    })
+  }, [abi])
+
   // Load example ABI transaction
   const loadExample = useCallback((example: any) => {
     const abiFunction = example.abi[0]
@@ -540,6 +600,9 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                   onRemove={() => removeParameter(index)}
                   onUpdateName={(newName) => updateParameterName(index, newName)}
                   onUpdateType={(newType) => updateParameterType(index, newType)}
+                  onAddTupleComponent={(componentName, componentType) => addTupleComponent(index, componentName, componentType)}
+                  onUpdateTupleComponentType={(componentName, newType) => updateTupleComponentType(index, componentName, newType)}
+                  onRemoveTupleComponent={(componentIndex) => removeTupleComponent(index, componentIndex)}
                   annotation="1"
                   index={index}
                 />
