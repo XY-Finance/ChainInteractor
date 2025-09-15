@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { AddressSelector } from '../../../components/ui'
 import TypeSelector from '../../../components/ui/TypeSelector'
-import { isAddress } from 'viem'
 
 interface AbiInput {
   name: string
@@ -19,7 +18,6 @@ interface ParameterInputProps {
   onRemove?: () => void
   onUpdateName?: (newName: string) => void
   onUpdateType?: (newType: string) => void
-  onAddComponent?: () => void
   annotation?: string
   index?: number
   disabled?: boolean
@@ -37,32 +35,6 @@ const getRecentValues = (type: string): string[] => {
   const key = `recent_${type}`
   return JSON.parse(localStorage.getItem(key) || '[]')
 }
-
-// Helper functions for type manipulation
-const getBaseType = (type: string): string => {
-  // Remove all [] suffixes to get the base type
-  return type.replace(/\[\]+$/, '')
-}
-
-const getArraySuffix = (type: string): string => {
-  // Extract all [] suffixes
-  const matches = type.match(/\[\]+$/)
-  return matches ? matches[0] : ''
-}
-
-const getArrayDimension = (type: string): number => {
-  // Count the number of [] pairs at the end
-  const matches = type.match(/\[\]+$/)
-  if (!matches) return 0
-  return matches[0].length / 2
-}
-
-const setArrayDimension = (baseType: string, dimension: number): string => {
-  // Create type with specified number of [] dimensions
-  return baseType + '[]'.repeat(dimension)
-}
-
-
 
 // Helper functions to generate annotations
 const generateArrayAnnotation = (parentAnnotation: string, index: number): string => {
@@ -94,7 +66,6 @@ const ParameterInput = React.memo(function ParameterInput({
   onRemove,
   onUpdateName,
   onUpdateType,
-  onAddComponent,
   annotation = "1",
   index = 0,
   disabled = false

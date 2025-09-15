@@ -1,15 +1,17 @@
 # Transaction Builder
 
-A dynamic transaction builder that allows users to create and execute any smart contract function call.
+A dynamic transaction builder that allows users to create and execute any smart contract function call using proper ABI structure.
 
 ## Features
 
+- **ABI-Based Architecture**: Uses direct ABI structure for `viem.encodeFunctionData` compatibility
 - **Dynamic Function Input**: Enter any function name and parameters
 - **Parameter Management**: Add, remove, and configure function parameters with proper Solidity types
-- **Real-time Encoding**: Encode function calls using ABI encoding
+- **Real-time Encoding**: Encode function calls using ABI encoding with sync state tracking
 - **Transaction Execution**: Send transactions directly to the blockchain
-- **Example Templates**: Pre-built examples for common transaction types
-- **Transaction Preview**: Review encoded data and transaction status
+- **Eth Call Support**: Test function calls without sending transactions
+- **Example Templates**: Pre-built examples for common transaction types including ERC-4337 EntryPoint
+- **Auto-sync Management**: Encoded data shows "Out of Sync" when parameters change
 
 ## Usage
 
@@ -26,33 +28,40 @@ A dynamic transaction builder that allows users to create and execute any smart 
   - `bool` - Boolean values
   - `string` - Text strings
   - `bytes`, `bytes32`, `bytes16`, `bytes8`, `bytes4`, `bytes2`, `bytes1` - Byte arrays
+  - `tuple` - Structured data types
+  - `[]` - Array types (e.g., `address[]`, `uint256[]`)
 
 ### 3. Transaction Execution
 - **Encode Data**: Generates the ABI-encoded function call
+- **Eth Call**: Test the function call without sending a transaction
 - **Send Transaction**: Executes the transaction on the blockchain
 
 ## Example Transactions
 
 The builder includes pre-built examples for common use cases:
 
-- **ERC20 Transfer**: Transfer tokens to another address
-- **ERC20 Approve**: Approve another address to spend tokens
-- **ERC721 Transfer**: Transfer an NFT
-- **Simple Storage**: Set a value in a storage contract
+- **ERC-2612 Permit**: Gasless token approvals
+- **USDC Transfer**: Transfer USDC tokens
+- **USDC Approve**: Approve token spending
+- **USDC Balance Check**: View token balances
+- **Multicall Aggregate**: Execute multiple calls in one transaction
+- **Install ECDSA Signer Module**: Smart account module installation
+- **EntryPoint handleOps (ERC-4337)**: Account abstraction operations
 
 ## Technical Details
 
 - Uses Viem for ABI encoding and transaction handling
-- Supports all standard Solidity types
+- Supports all standard Solidity types including complex nested structures
 - Validates Ethereum addresses and parameter formats
 - Integrates with the existing wallet management system
 - Provides real-time feedback and error handling
+- Automatic sync state management for encoded data
+- Recent values storage for improved UX
 
 ## Components
 
 - `TransactionBuilder.tsx` - Main component with form and logic
-- `ParameterInput.tsx` - Individual parameter input fields
-- `TransactionPreview.tsx` - Display encoded data and transaction status
+- `ParameterInput.tsx` - Individual parameter input fields with recursive rendering
 - `ExampleTransactions.tsx` - Pre-built transaction examples
 
 ## Error Handling
@@ -60,4 +69,5 @@ The builder includes pre-built examples for common use cases:
 - Validates function names and parameters
 - Checks Ethereum address format
 - Ensures all required fields are filled
-- Provides clear error messages in the operation logs
+- Provides clear error messages and type hints
+- Shows validation state in real-time
