@@ -10,7 +10,7 @@ interface PnLChartProps {
   aggregation?: string
 }
 
-export function PnLChart({ 
+export function PnLChart({
   userAddress = "0x020ca66c30bec2c4fe3861a94e4db4a498a35872",
   timeRange = "24H",
   pnlType = "PnL",
@@ -22,16 +22,17 @@ export function PnLChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   // Fetch data from Hyperliquid API (only once)
-  const { getChartData, getCurrentPnL, loading, error } = useHyperliquidData(userAddress)
+  const { getChartData, getCurrentPnL, getAPY, loading, error } = useHyperliquidData(userAddress)
 
   // Get chart data and current PnL based on selected time range, aggregation and metric
   const chartData = getChartData(selectedTimeRange, selectedAggregation, selectedMetric)
   const currentPnL = getCurrentPnL(selectedTimeRange, selectedAggregation, selectedMetric)
+  const apy = getAPY(selectedTimeRange, selectedAggregation)
 
   // Calculate dynamic range based on actual data
-  const dataMax = Math.max(...chartData.map(d => d.value))
-  const dataMin = Math.min(...chartData.map(d => d.value))
-  
+  const dataMax = chartData.length > 0 ? Math.max(...chartData.map(d => d.value)) : 0
+  const dataMin = chartData.length > 0 ? Math.min(...chartData.map(d => d.value)) : 0
+
   // Add some padding to the range for better visualization
   const padding = (dataMax - dataMin) * 0.1
   const maxValue = dataMax + padding
@@ -39,6 +40,17 @@ export function PnLChart({
   const range = maxValue - minValue
 
   const isPnLPositive = currentPnL >= 0
+
+  // If no data available, show empty state
+  if (chartData.length === 0) {
+    return (
+      <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-2xl h-97">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-white">No data available for the selected time range</div>
+        </div>
+      </div>
+    )
+  }
 
   // Chart geometry and Y-axis ticks
   const svgWidth = 2000
@@ -82,12 +94,12 @@ export function PnLChart({
 
   const { ticks: yTicks, axisMin, axisMax } = generateTicks(minValue, maxValue)
   const axisRange = Math.max(1, axisMax - axisMin)
-  
+
   // Determine line color based on latest data point
   const latestValue = chartData[chartData.length - 1]?.value || 0
   const isLatestPositive = latestValue >= 0
   const lineColor = isLatestPositive ? "#10B981" : "#EF4444" // Green for positive, Red for negative
- 
+
   // y position for value = 0 line
   const zeroY = yTop + (1 - (0 - axisMin) / axisRange) * plotHeight
 
@@ -178,7 +190,7 @@ export function PnLChart({
 
           {/* Display Metric Controls */}
           <div className="flex bg-gray-700/[0.3] rounded-xl p-1 gap-1">
-            {['PnL', 'Account Value'].map((metric) => (
+            {['PnL', 'Account Value', 'PnL %'].map((metric) => (
               <button
                 key={metric}
                 onClick={() => setSelectedMetric(metric)}
@@ -202,8 +214,15 @@ export function PnLChart({
         <h3 className="text-lg font-semibold text-white">
           {selectedTimeRange} {selectedMetric} ({selectedAggregation})
         </h3>
-        <div className={`text-2xl font-bold ${isPnLPositive ? 'text-green-400' : 'text-red-400'}`}>
-          ${currentPnL.toLocaleString()}
+        <div className="flex flex-col items-end">
+          <div className={`text-2xl font-bold ${isPnLPositive ? 'text-green-400' : 'text-red-400'}`}>
+            {selectedMetric === 'PnL %' ? `${currentPnL.toFixed(2)}%` : `$${currentPnL.toLocaleString()}`}
+          </div>
+          {selectedMetric === 'PnL %' && (
+            <div className={`text-sm font-medium ${apy >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {selectedTimeRange} APY: {apy.toFixed(2)}%
+            </div>
+          )}
         </div>
       </div>
 
@@ -230,7 +249,10 @@ export function PnLChart({
             const y = yTop + (1 - (value - axisMin) / axisRange) * plotHeight
             return (
               <text key={idx} x="5" y={y} className="text-lg fill-gray-400">
-                ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {selectedMetric === 'PnL %'
+                  ? `${value.toFixed(2)}%`
+                  : `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                }
               </text>
             )
           })}
@@ -324,7 +346,12 @@ export function PnLChart({
                 height="100"
               >
                 <div className="bg-black/45 backdrop-blur-sm text-white p-4 rounded-xl shadow-2xl border border-white/20">
-                  <div className="font-extrabold text-2xl leading-tight">${chartData[hoverIndex].value.toLocaleString()}</div>
+                  <div className="font-extrabold text-2xl leading-tight">
+                    {selectedMetric === 'PnL %'
+                      ? `${chartData[hoverIndex].value.toFixed(2)}%`
+                      : `$${chartData[hoverIndex].value.toLocaleString()}`
+                    }
+                  </div>
                   <div className="text-gray-300 text-sm mt-1">
                     {chartData[hoverIndex].ts
                       ? new Date(chartData[hoverIndex].ts).toLocaleString('en-US', {
@@ -363,7 +390,7 @@ export function PnLChart({
           {chartData.map((point, index) => {
             // Only show every 3rd label to reduce crowding
             if (index % 3 !== 0 && index !== chartData.length - 1) return null
-            
+
             const x = getX(index)
             return (
               <text
