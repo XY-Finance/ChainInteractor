@@ -531,7 +531,7 @@ const ParameterInput = React.memo(function ParameterInput({
                   annotation={elementAnnotation}
                   disabled={elementType !== 'tuple'}
                   arrayParent={arrayParent ? { ...arrayParent } : { path: currentPath.path }}
-                  currentPath={{ path: [...currentPath.path, item.identifier || index] }}
+                  currentPath={{ path: [currentPath.path[0]] }}
                 />
               </div>
             )
@@ -558,10 +558,10 @@ const ParameterInput = React.memo(function ParameterInput({
                   onRemove={() => {
                     // Remove from ABI structure (this should also handle data removal)
                     if (onRemoveTupleComponent) {
-                      onRemoveTupleComponent({ path: [...currentPath.path, componentIdentifier] })
+                      onRemoveTupleComponent({ path: [currentPath.path[0], componentIdentifier] })
                     }
                   }}
-                  onUpdateType={(newType) => onUpdateTupleComponentType?.({ path: [...currentPath.path, componentIdentifier] }, newType)}
+                  onUpdateType={(newType) => onUpdateTupleComponentType?.({ path: [currentPath.path[0], componentIdentifier] }, newType)}
                   annotation={componentAnnotation}
                   disabled={false}
                   arrayParent={arrayParent ? { ...arrayParent, path: [...arrayParent.path, componentIdentifier] } : null}

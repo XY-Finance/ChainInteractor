@@ -458,7 +458,8 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
   // Remove tuple component from ABI structure using path
   const removeTupleComponent = useCallback((path: IdentifierPath) => {
-    // First, get the component name before removing it from ABI
+    // Track whether ABI removal was successful
+    let abiRemovalSuccessful = false
     let componentName: string | null = null
 
     setAbi(prev => {
@@ -498,29 +499,45 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         }
       }
 
-      // Remove the component at the final identifier
+      // Remove the component at the final identifier (idempotent operation)
       const finalIdentifier = path.path[path.path.length - 1]
       if (current.components) {
         const componentExists = current.components.some((comp: any) => comp.identifier === finalIdentifier)
         if (componentExists) {
           current.components = current.components.filter((comp: any) => comp.identifier !== finalIdentifier)
+          abiRemovalSuccessful = true // Mark ABI removal as successful
         }
       }
 
       return newAbi
     })
 
-    // Remove the corresponding data value
-    if (componentName) {
+    // Only remove data if ABI removal was successful
+    if (abiRemovalSuccessful && componentName) {
       setDataArray(prev => {
         const newMap = new Map(prev)
         const parameterIdentifier = path.path[0]
         const parameterData = newMap.get(parameterIdentifier)
 
-        if (parameterData && typeof parameterData === 'object') {
-          const newData = { ...parameterData }
-          delete newData[componentName!]
-          newMap.set(parameterIdentifier, newData)
+        if (parameterData) {
+          // Check if this is an array (tuple[])
+          if (Array.isArray(parameterData)) {
+            // For tuple[] arrays, remove the component from all tuples
+            const newArray = parameterData.map((item: any) => {
+              if (item && typeof item === 'object' && item.value && typeof item.value === 'object') {
+                const newValue = { ...item.value }
+                delete newValue[componentName!]
+                return { ...item, value: newValue }
+              }
+              return item
+            })
+            newMap.set(parameterIdentifier, newArray)
+          } else if (typeof parameterData === 'object') {
+            // For single tuples, remove the component by name
+            const newData = { ...parameterData }
+            delete newData[componentName!]
+            newMap.set(parameterIdentifier, newData)
+          }
         }
 
         return newMap
