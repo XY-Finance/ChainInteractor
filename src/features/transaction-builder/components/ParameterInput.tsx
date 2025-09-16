@@ -384,7 +384,7 @@ const ParameterInput = React.memo(function ParameterInput({
             }}
             placeholder="Select type..."
             className="text-sm"
-            disabled={disabled}
+            disabled={disabled || (abiInput.type === 'tuple' && arrayParent !== null)}
           />
         </div>
 
