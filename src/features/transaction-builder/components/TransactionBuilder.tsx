@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { encodeFunctionData, isAddress } from 'viem'
+import { getDefaultValueForType } from '../../../utils/typeUtils'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
 
@@ -571,6 +572,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     }
   }, [])
 
+
   // Load example ABI transaction
   const loadExample = useCallback((example: any) => {
     const abiFunction = example.abi[0]
@@ -578,26 +580,66 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     setFunctionName(abiFunction.name)
     setTargetAddress(example.targetAddress)
 
-    // Convert example data to identifier-based structure
-    const newDataMap = new Map()
-    const newParameterOrder: string[] = []
+    // Helper function to add identifiers to ABI components recursively
+    const addIdentifiersToAbi = (inputs: any[], dataValues: any[]): { abi: any[], dataMap: Map<string, any>, parameterOrder: string[] } => {
+      const dataMap = new Map()
+      const parameterOrder: string[] = []
 
-    if (example.data && Array.isArray(example.data)) {
-      example.data.forEach((value: any, index: number) => {
-        const identifier = Date.now().toString() + index // Ensure unique identifiers
-        newDataMap.set(identifier, value)
-        newParameterOrder.push(identifier)
+      const processedInputs = inputs.map((input: any, index: number) => {
+        const identifier = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+        const dataValue = dataValues[index]
+
+        // Handle tuple components recursively
+        if (input.components && Array.isArray(input.components)) {
+          // Just add identifiers to tuple components - keep the data structure simple
+          const processedComponents = input.components.map((comp: any) => ({
+            ...comp,
+            identifier: Date.now().toString() + Math.random().toString(36).substr(2, 9)
+          }))
+
+          // For tuple[] types, structure the data properly
+          if (input.type.endsWith('[]') && Array.isArray(dataValue)) {
+            const structuredData = dataValue.map((item: any) => ({
+              identifier: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              value: item
+            }))
+            dataMap.set(identifier, structuredData)
+          } else {
+            // For single tuples, store the data as-is
+            dataMap.set(identifier, dataValue)
+          }
+
+          parameterOrder.push(identifier)
+
+          return {
+            ...input,
+            identifier,
+            components: processedComponents
+          }
+        }
+
+        // Store data value
+        dataMap.set(identifier, dataValue)
+        parameterOrder.push(identifier)
+
+        return {
+          ...input,
+          identifier
+        }
       })
+
+      return { abi: processedInputs, dataMap, parameterOrder }
     }
 
-    // Add identifiers to ABI inputs
-    const newAbi = [...example.abi]
-    if (newAbi[0] && newAbi[0].inputs) {
-      newAbi[0].inputs = newAbi[0].inputs.map((input: any, index: number) => ({
-        ...input,
-        identifier: newParameterOrder[index] || Date.now().toString() + index
-      }))
-    }
+    // Process the ABI and data
+    const { abi: processedAbi, dataMap: newDataMap, parameterOrder: newParameterOrder } =
+      addIdentifiersToAbi(abiFunction.inputs, example.data || [])
+
+    // Create the new ABI structure
+    const newAbi = [{
+      ...abiFunction,
+      inputs: processedAbi
+    }]
 
     setAbi(newAbi)
     setDataArray(newDataMap)

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { AddressSelector } from '../../../components/ui'
 import TypeSelector from '../../../components/ui/TypeSelector'
+import { getDefaultValueForType } from '../../../utils/typeUtils'
 
 interface AbiInput {
   name: string
@@ -168,41 +169,6 @@ const ParameterInput = React.memo(function ParameterInput({
     }
   }
 
-  // Get default value for type
-  const getDefaultValueForType = (type: string): any => {
-    switch (type) {
-      case 'address':
-        return ''
-      case 'uint256':
-      case 'uint128':
-      case 'uint64':
-      case 'uint32':
-      case 'uint16':
-      case 'uint8':
-      case 'int256':
-      case 'int128':
-      case 'int64':
-      case 'int32':
-      case 'int16':
-      case 'int8':
-        return 0n
-      case 'bool':
-        return false
-      case 'string':
-      case 'bytes':
-      case 'bytes32':
-      case 'bytes16':
-      case 'bytes8':
-      case 'bytes4':
-      case 'bytes2':
-      case 'bytes1':
-        return ''
-      case 'tuple':
-        return {}
-      default:
-        return ''
-    }
-  }
 
   // Custom JSON stringify that handles BigInt
   const safeStringify = (value: any): string => {
