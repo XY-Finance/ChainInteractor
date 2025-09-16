@@ -8,6 +8,15 @@ interface AbiInput {
   name: string
   type: string
   components?: AbiInput[]
+  identifier?: string // For idempotent operations
+}
+
+interface IdentifierPath {
+  path: string[] // Array of identifiers in order - first is parameter, rest are nested components
+}
+
+interface ArrayParent {
+  path: string[] // Full path to the parent array
 }
 
 interface ParameterInputProps {
@@ -19,11 +28,12 @@ interface ParameterInputProps {
   onUpdateName?: (newName: string) => void
   onUpdateType?: (newType: string) => void
   onAddTupleComponent?: (componentName: string, componentType: string) => void
-  onUpdateTupleComponentType?: (componentName: string, newType: string) => void
-  onRemoveTupleComponent?: (componentIndex: number) => void
+  onUpdateTupleComponentType?: (path: IdentifierPath, newType: string) => void
+  onRemoveTupleComponent?: (path: IdentifierPath) => void
   annotation?: string
-  index?: number
   disabled?: boolean
+  arrayParent?: ArrayParent | null
+  currentPath?: IdentifierPath // The full path to this component
 }
 
 // localStorage utilities for recent values
@@ -73,8 +83,9 @@ const ParameterInput = React.memo(function ParameterInput({
   onUpdateTupleComponentType,
   onRemoveTupleComponent,
   annotation = "1",
-  index = 0,
-  disabled = false
+  disabled = false,
+  arrayParent = null,
+  currentPath = { path: [] }
 }: ParameterInputProps) {
   const isInvalid = validation && !validation.isValid && dataValue !== undefined && dataValue !== null && dataValue !== ''
 
@@ -245,25 +256,48 @@ const ParameterInput = React.memo(function ParameterInput({
 
   // Handle array operations
   const handleArrayAdd = () => {
+    const identifier = Date.now().toString()
     if (Array.isArray(dataValue)) {
-      const newArray = [...dataValue, getDefaultValueForType(abiInput.type.slice(0, -2))]
+      // For arrays, we need to check if the last element is the same as what we're about to add
+      // This makes the operation idempotent - if the last element is already a default value, skip
+      const lastElement = dataValue[dataValue.length - 1]
+      const defaultValue = getDefaultValueForType(abiInput.type.slice(0, -2))
+
+      if (lastElement && lastElement.value === defaultValue) {
+        return // Skip if last element is already the default value (idempotent)
+      }
+
+      const newArray = [...dataValue, {
+        value: defaultValue,
+        identifier
+      }]
       onUpdate(newArray)
     } else {
-      onUpdate([getDefaultValueForType(abiInput.type.slice(0, -2))])
+      onUpdate([{
+        value: getDefaultValueForType(abiInput.type.slice(0, -2)),
+        identifier
+      }])
     }
   }
 
-  const handleArrayRemove = (index: number) => {
+  const handleArrayRemove = (identifier: string) => {
     if (Array.isArray(dataValue)) {
-      const newArray = dataValue.filter((_, i) => i !== index)
+      // Skip if identifier doesn't exist (idempotent operation)
+      const itemExists = dataValue.find((item: any) => item.identifier === identifier)
+      if (!itemExists) {
+        return // Skip if item doesn't exist
+      }
+
+      const newArray = dataValue.filter((item: any) => item.identifier !== identifier)
       onUpdate(newArray)
     }
   }
 
-  const handleArrayUpdate = (index: number, newValue: any) => {
+  const handleArrayUpdate = (identifier: string, newValue: any) => {
     if (Array.isArray(dataValue)) {
-      const newArray = [...dataValue]
-      newArray[index] = newValue
+      const newArray = dataValue.map((item: any) =>
+        item.identifier === identifier ? { ...item, value: newValue } : item
+      )
       onUpdate(newArray)
     }
   }
@@ -271,25 +305,39 @@ const ParameterInput = React.memo(function ParameterInput({
 
   // Handle tuple operations
   const handleTupleAdd = () => {
-    const newTuple = { [""]: getDefaultValueForType("address") }
-    if (abiInput?.components) {
-      abiInput.components.forEach(comp => {
-        (newTuple as Record<string, any>)[comp.name] = getDefaultValueForType(comp.type)
-      })
-    }
+    const identifier = Date.now().toString()
+    const componentName = `component_${identifier}`
+
+    // Add a default component to the ABI structure
     if (onAddTupleComponent) {
-      onAddTupleComponent("", "address")
+      onAddTupleComponent(componentName, "address")
     }
+
+    // Initialize or update the tuple data structure
+    const newTuple = typeof dataValue === 'object' && dataValue !== null
+      ? { ...dataValue, identifier }
+      : { identifier }
+
+    // Add the new component's default value
+    newTuple[componentName] = getDefaultValueForType("address")
+
     onUpdate(newTuple)
   }
 
-  const handleTupleUpdate = (componentName: string, newValue: any) => {
+  const handleTupleUpdate = (componentIdentifier: string, newValue: any) => {
     if (typeof dataValue === 'object' && dataValue !== null) {
       const newTuple = { ...dataValue }
-      newTuple[componentName] = newValue
+      // Find component by identifier and update its value
+      if (abiInput.components) {
+        const component = abiInput.components.find((comp: any) => comp.identifier === componentIdentifier)
+        if (component) {
+          newTuple[component.name] = newValue
+        }
+      }
       onUpdate(newTuple)
     }
   }
+
 
   return (
     <>
@@ -317,11 +365,12 @@ const ParameterInput = React.memo(function ParameterInput({
           <TypeSelector
             value={abiInput.type}
             onChange={(newType) => {
-              console.log('TypeSelector onChange called:', { newType, disabled, hasOnUpdateType: !!onUpdateType })
 
-              // Special handling for array types - preserve data when changing element type
-              if (onUpdateType && abiInput.type.endsWith('[]') && newType.endsWith('[]') && Array.isArray(dataValue)) {
-                console.log('Array type change detected, preserving data')
+              // Type change of array parent changes children instead of clearing them
+              const isArrayType = abiInput.type.endsWith('[]')
+              const shouldPreserveData = isArrayType && newType.endsWith('[]') && Array.isArray(dataValue)
+
+              if (onUpdateType && shouldPreserveData && (isArrayType || arrayParent !== null)) {
                 const preservedData = [...dataValue]
                 onUpdateType(newType)
                 // Restore data after type change
@@ -462,22 +511,27 @@ const ParameterInput = React.memo(function ParameterInput({
             const elementAbiInput: AbiInput = {
               name: `element_${index}`,
               type: elementType,
-              components: abiInput.components
+              components: abiInput.components,
+              identifier: item.identifier
             }
 
             const elementAnnotation = generateArrayAnnotation(annotation, index + 1)
 
             return (
-              <div key={index} className="ml-2 border-l-2 border-gray-200 pl-2">
+              <div key={item.identifier || index} className="ml-2 border-l-2 border-gray-200 pl-2">
                 <ParameterInput
                   abiInput={elementAbiInput}
-                  dataValue={item}
+                  dataValue={item.value || item}
                   validation={validation}
-                  onUpdate={(newValue) => handleArrayUpdate(index, newValue)}
-                  onRemove={() => handleArrayRemove(index)}
+                  onUpdate={(newValue) => handleArrayUpdate(item.identifier, newValue)}
+                  onRemove={() => handleArrayRemove(item.identifier)}
+                  onAddTupleComponent={onAddTupleComponent}
+                  onUpdateTupleComponentType={onUpdateTupleComponentType}
+                  onRemoveTupleComponent={onRemoveTupleComponent}
                   annotation={elementAnnotation}
-                  index={index}
-                  disabled={true}
+                  disabled={elementType !== 'tuple'}
+                  arrayParent={arrayParent ? { ...arrayParent } : { path: currentPath.path }}
+                  currentPath={{ path: [...currentPath.path, item.identifier || index] }}
                 />
               </div>
             )
@@ -492,19 +546,26 @@ const ParameterInput = React.memo(function ParameterInput({
             const isLast = index === abiInput.components!.length - 1
             const componentAnnotation = generateTupleAnnotation(annotation, index + 1, isLast)
             const componentValue = dataValue[component.name]
+            const componentIdentifier = component.identifier || Date.now().toString() + index
 
             return (
-              <div key={`${component.name || 'unnamed'}-${index}`} className="ml-2 border-l-2 border-gray-200 pl-2">
+              <div key={`${component.name || 'unnamed'}-${componentIdentifier}`} className="ml-2 border-l-2 border-gray-200 pl-2">
                 <ParameterInput
                   abiInput={component}
                   dataValue={componentValue}
                   validation={validation}
-                  onUpdate={(newValue) => handleTupleUpdate(component.name, newValue)}
-                  onRemove={() => onRemoveTupleComponent?.(index)}
-                  onUpdateType={(newType) => onUpdateTupleComponentType?.(component.name, newType)}
+                  onUpdate={(newValue) => handleTupleUpdate(componentIdentifier, newValue)}
+                  onRemove={() => {
+                    // Remove from ABI structure (this should also handle data removal)
+                    if (onRemoveTupleComponent) {
+                      onRemoveTupleComponent({ path: [...currentPath.path, componentIdentifier] })
+                    }
+                  }}
+                  onUpdateType={(newType) => onUpdateTupleComponentType?.({ path: [...currentPath.path, componentIdentifier] }, newType)}
                   annotation={componentAnnotation}
-                  index={index}
                   disabled={false}
+                  arrayParent={arrayParent ? { ...arrayParent, path: [...arrayParent.path, componentIdentifier] } : null}
+                  currentPath={{ path: [...currentPath.path, componentIdentifier] }}
                 />
               </div>
             )

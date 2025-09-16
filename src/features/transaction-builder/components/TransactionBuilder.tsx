@@ -9,6 +9,10 @@ import { encodeFunctionData, isAddress } from 'viem'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
 
+interface IdentifierPath {
+  path: string[] // Array of identifiers in order - first is parameter, rest are nested components
+}
+
 // Simplified state - just maintain ABI and data array
 // UI parameters are derived from these for interaction
 
@@ -114,8 +118,10 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   const { currentAccount, sendTransaction, publicClient } = useWalletManager()
 
   // Core state - maintain ABI and dataArray for viem.encodeFunctionData
+  // Use timestamp-based identifiers for idempotent operations
   const [abi, setAbi] = useState<any[]>([])
-  const [dataArray, setDataArray] = useState<any[]>([])
+  const [dataArray, setDataArray] = useState<Map<string, any>>(new Map())
+  const [parameterOrder, setParameterOrder] = useState<string[]>([]) // Maintain order of parameters
   const [functionName, setFunctionName] = useState<string>('')
   const [targetAddress, setTargetAddress] = useState<string>('')
 
@@ -138,7 +144,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     if (encodedData) {
       setIsEncodedDataInSync(false)
     }
-  }, [functionName, abi, dataArray])
+  }, [functionName, abi, dataArray, parameterOrder])
 
   // Validation state
   const validationState = useMemo((): ValidationState => {
@@ -150,8 +156,9 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
     if (abi.length > 0 && abi[0]?.inputs) {
       abi[0].inputs.forEach((input: any, index: number) => {
-        const value = dataArray[index]
-        parametersValidation[`param-${index}`] = validateDataValue(input, value)
+        const identifier = parameterOrder[index]
+        const value = identifier ? dataArray.get(identifier) : undefined
+        parametersValidation[`param-${identifier || index}`] = validateDataValue(input, value)
       })
     }
 
@@ -160,7 +167,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       targetAddress: targetAddressValidation,
       parameters: parametersValidation
     }
-  }, [functionName, targetAddress, abi, dataArray])
+  }, [functionName, targetAddress, abi, dataArray, parameterOrder])
 
     // Check if all inputs are valid (for encoding - target address not required)
   const isAllValid = useMemo(() => {
@@ -215,20 +222,60 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     return `${baseUrl}${hash}`
   }, [publicClient])
 
-  // Update dataArray value at specific index
-  const updateDataValue = useCallback((index: number, newValue: any) => {
+  // Update dataArray value at specific path
+  const updateDataValue = useCallback((path: IdentifierPath, newValue: any) => {
     setDataArray(prev => {
-      const newArray = [...prev]
-      newArray[index] = newValue
-      return newArray
+      const newMap = new Map(prev)
+      const parameterIdentifier = path.path[0] // First identifier is the parameter
+
+      if (path.path.length === 1) {
+        // Simple parameter update
+        newMap.set(parameterIdentifier, newValue)
+      } else {
+        // Nested update - need to update the parameter's nested data
+        const parameterData = newMap.get(parameterIdentifier)
+        if (parameterData && typeof parameterData === 'object') {
+          const newData = { ...parameterData }
+
+          // Navigate to the nested location and update
+          let current = newData
+          for (let i = 1; i < path.path.length - 1; i++) {
+            const pathSegment = path.path[i]
+            if (current[pathSegment] && typeof current[pathSegment] === 'object') {
+              current = current[pathSegment]
+            } else {
+              // Path doesn't exist, can't update
+              return prev
+            }
+          }
+
+          // Update the final value
+          const finalKey = path.path[path.path.length - 1]
+          current[finalKey] = newValue
+
+          newMap.set(parameterIdentifier, newData)
+        }
+      }
+
+      return newMap
     })
   }, [])
 
   // Add a new parameter
   const addParameter = useCallback(() => {
+    // Check if the last parameter is already a default parameter (idempotent operation)
+    if (abi.length > 0 && abi[0]?.inputs && abi[0].inputs.length > 0) {
+      const lastInput = abi[0].inputs[abi[0].inputs.length - 1]
+      if (lastInput.name === `param${abi[0].inputs.length - 1}` && lastInput.type === 'address') {
+        return // Skip if last parameter is already a default parameter (idempotent)
+      }
+    }
+
+    const identifier = Date.now().toString()
     const newInput = {
-      name: `param${abi.length > 0 ? abi[0].inputs.length : 0}`,
-      type: 'address'
+      name: `param${parameterOrder.length}`,
+      type: 'address',
+      identifier // Add identifier to input for reference
     }
 
     setAbi(prev => {
@@ -252,33 +299,48 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       }
     })
 
-    setDataArray(prev => [...prev, ''])
-  }, [abi, functionName])
+    setParameterOrder(prev => [...prev, identifier])
+    setDataArray(prev => {
+      const newMap = new Map(prev)
+      newMap.set(identifier, '')
+      return newMap
+    })
+  }, [abi, functionName, parameterOrder.length])
 
   // Remove a parameter
-  const removeParameter = useCallback((index: number) => {
+  const removeParameter = useCallback((identifier: string) => {
+    // Skip if identifier doesn't exist (idempotent operation)
+    if (!parameterOrder.includes(identifier)) {
+      return
+    }
+
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
       newAbi[0] = {
         ...newAbi[0],
-        inputs: newAbi[0].inputs.filter((_: any, i: number) => i !== index)
+        inputs: newAbi[0].inputs.filter((input: any) => input.identifier !== identifier)
       }
       return newAbi
     })
 
-    setDataArray(prev => prev.filter((_, i) => i !== index))
-  }, [])
+    setParameterOrder(prev => prev.filter(id => id !== identifier))
+    setDataArray(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(identifier)
+      return newMap
+    })
+  }, [parameterOrder])
 
   // Update parameter name
-  const updateParameterName = useCallback((index: number, newName: string) => {
+  const updateParameterName = useCallback((identifier: string, newName: string) => {
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
       newAbi[0] = {
         ...newAbi[0],
-        inputs: newAbi[0].inputs.map((input: any, i: number) =>
-          i === index ? { ...input, name: newName } : input
+        inputs: newAbi[0].inputs.map((input: any) =>
+          input.identifier === identifier ? { ...input, name: newName } : input
         )
       }
       return newAbi
@@ -286,86 +348,169 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   }, [])
 
   // Update parameter type
-  const updateParameterType = useCallback((index: number, newType: string) => {
+  const updateParameterType = useCallback((identifier: string, newType: string) => {
+    // Update the ABI structure with the new type for the specified parameter
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
       newAbi[0] = {
         ...newAbi[0],
-        inputs: newAbi[0].inputs.map((input: any, i: number) =>
-          i === index ? { ...input, type: newType } : input
+        // Map through all inputs and update only the one with the specified identifier
+        inputs: newAbi[0].inputs.map((input: any) =>
+          input.identifier === identifier ? { ...input, type: newType } : input
         )
       }
       return newAbi
     })
 
-    // Reset data value when type changes
+    // Reset data value when type changes to prevent type mismatches
+    // This ensures the data array stays in sync with the ABI structure
     setDataArray(prev => {
-      const newArray = [...prev]
-      newArray[index] = ''
-      return newArray
+      const newMap = new Map(prev)
+      newMap.set(identifier, '') // Clear the value for the changed parameter
+      return newMap
     })
   }, [])
 
   // Add tuple component to ABI structure
-  const addTupleComponent = useCallback((parameterIndex: number, componentName: string, componentType: string) => {
+  const addTupleComponent = useCallback((parameterIdentifier: string, componentName: string, componentType: string) => {
+    const componentIdentifier = Date.now().toString()
+
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === parameterIdentifier)
+
+      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
+
       if (!newAbi[0].inputs[parameterIndex].components) {
         newAbi[0].inputs[parameterIndex].components = []
       }
+
+      // Check if we're trying to add a component that already exists (idempotent)
+      const existingComponent = newAbi[0].inputs[parameterIndex].components.find(
+        (comp: any) => comp.name === componentName && comp.type === componentType
+      )
+      if (existingComponent) {
+        return prev // Skip if component already exists (idempotent)
+      }
+
       newAbi[0].inputs[parameterIndex].components.push({
         name: componentName,
-        type: componentType
+        type: componentType,
+        identifier: componentIdentifier
       })
       return newAbi
     })
   }, [])
 
-  // Update tuple component type in ABI structure
-  const updateTupleComponentType = useCallback((parameterIndex: number, componentName: string, newType: string) => {
+  // Update tuple component type in ABI structure using path
+  const updateTupleComponentType = useCallback((path: IdentifierPath, newType: string) => {
     setAbi(prev => {
-      if (prev.length === 0) return prev
+      if (prev.length === 0 || path.path.length === 0) return prev
       const newAbi = [...prev]
-      if (newAbi[0].inputs[parameterIndex].components) {
-        newAbi[0].inputs[parameterIndex].components = newAbi[0].inputs[parameterIndex].components.map((comp: any) =>
-          comp.name === componentName ? { ...comp, type: newType } : comp
-        )
+
+      // Find parameter by first identifier
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path.path[0])
+      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
+
+      // Navigate to the component using the path
+      let current = newAbi[0].inputs[parameterIndex]
+
+      // Navigate through the remaining path to find the target component
+      for (let i = 1; i < path.path.length; i++) {
+        const pathSegment = path.path[i]
+        // Component identifier - find by identifier
+        if (current.components && Array.isArray(current.components)) {
+          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+          if (componentIndex !== -1) {
+            current = current.components[componentIndex]
+          } else {
+            return prev // Skip if component not found (idempotent)
+          }
+        }
       }
+
+      // Update the type
+      if (current && typeof current === 'object') {
+        current.type = newType
+      }
+
       return newAbi
     })
   }, [])
 
-  // Remove tuple component from ABI structure
-  const removeTupleComponent = useCallback((parameterIndex: number, componentIndex: number) => {
+  // Remove tuple component from ABI structure using path
+  const removeTupleComponent = useCallback((path: IdentifierPath) => {
+    // First, get the component name before removing it from ABI
+    let componentName: string | null = null
+
     setAbi(prev => {
-      if (prev.length === 0) return prev
+      if (prev.length === 0 || path.path.length === 0) return prev
       const newAbi = [...prev]
 
-      if (newAbi[0].inputs[parameterIndex]?.components) {
-        newAbi[0].inputs[parameterIndex].components = newAbi[0].inputs[parameterIndex].components.filter((_: any, i: number) =>
-          i !== componentIndex
-        )
+      // Find parameter by first identifier
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path.path[0])
+      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
+
+      // Navigate to the component to get its name before removing
+      let current = newAbi[0].inputs[parameterIndex]
+      for (let i = 1; i < path.path.length; i++) {
+        const pathSegment = path.path[i]
+        if (current.components && Array.isArray(current.components)) {
+          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+          if (componentIndex !== -1) {
+            current = current.components[componentIndex]
+            if (i === path.path.length - 1) {
+              componentName = current.name // This is the component to be removed
+            }
+          }
+        }
       }
+
+      // Navigate to the parent component
+      current = newAbi[0].inputs[parameterIndex]
+      for (let i = 1; i < path.path.length - 1; i++) {
+        const pathSegment = path.path[i]
+        if (current.components && Array.isArray(current.components)) {
+          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+          if (componentIndex !== -1) {
+            current = current.components[componentIndex]
+          } else {
+            return prev // Skip if component not found (idempotent)
+          }
+        }
+      }
+
+      // Remove the component at the final identifier
+      const finalIdentifier = path.path[path.path.length - 1]
+      if (current.components) {
+        const componentExists = current.components.some((comp: any) => comp.identifier === finalIdentifier)
+        if (componentExists) {
+          current.components = current.components.filter((comp: any) => comp.identifier !== finalIdentifier)
+        }
+      }
+
       return newAbi
     })
 
-    // Also remove the corresponding data value
-    setDataArray(prev => {
-      const newArray = [...prev]
+    // Remove the corresponding data value
+    if (componentName) {
+      setDataArray(prev => {
+        const newMap = new Map(prev)
+        const parameterIdentifier = path.path[0]
+        const parameterData = newMap.get(parameterIdentifier)
 
-      if (typeof newArray[parameterIndex] === 'object' && newArray[parameterIndex] !== null) {
-        const newTuple = { ...newArray[parameterIndex] }
-        const componentName = abi[0]?.inputs[parameterIndex]?.components?.[componentIndex]?.name
-        if (componentName) {
-          delete newTuple[componentName]
+        if (parameterData && typeof parameterData === 'object') {
+          const newData = { ...parameterData }
+          delete newData[componentName!]
+          newMap.set(parameterIdentifier, newData)
         }
-        newArray[parameterIndex] = newTuple
-      }
-      return newArray
-    })
-  }, [abi])
+
+        return newMap
+      })
+    }
+  }, [])
 
   // Load example ABI transaction
   const loadExample = useCallback((example: any) => {
@@ -373,10 +518,32 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
     setFunctionName(abiFunction.name)
     setTargetAddress(example.targetAddress)
-    setAbi(example.abi)
-    setDataArray(example.data)
 
-    console.log('Loaded ABI example:', { abiFunction, dataArray: example.data })
+    // Convert example data to identifier-based structure
+    const newDataMap = new Map()
+    const newParameterOrder: string[] = []
+
+    if (example.data && Array.isArray(example.data)) {
+      example.data.forEach((value: any, index: number) => {
+        const identifier = Date.now().toString() + index // Ensure unique identifiers
+        newDataMap.set(identifier, value)
+        newParameterOrder.push(identifier)
+      })
+    }
+
+    // Add identifiers to ABI inputs
+    const newAbi = [...example.abi]
+    if (newAbi[0] && newAbi[0].inputs) {
+      newAbi[0].inputs = newAbi[0].inputs.map((input: any, index: number) => ({
+        ...input,
+        identifier: newParameterOrder[index] || Date.now().toString() + index
+      }))
+    }
+
+    setAbi(newAbi)
+    setDataArray(newDataMap)
+    setParameterOrder(newParameterOrder)
+
   }, [])
 
   // Encode function data using the ABI structure
@@ -385,7 +552,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
-    if (!functionName || !abi[0] || !dataArray.length) {
+    if (!functionName || !abi[0] || parameterOrder.length === 0) {
       return
     }
 
@@ -399,8 +566,9 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       }
 
       // Filter out empty values and validate before encoding
-      const validDataArray = dataArray.map((value, index) => {
+      const validDataArray = parameterOrder.map((identifier, index) => {
         const input = abi[0].inputs[index]
+        const value = dataArray.get(identifier)
         if (!input) return value
 
         // Skip empty values for required fields
@@ -426,7 +594,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsEncoding(false)
     }
-  }, [functionName, abi, dataArray, isAllValid])
+  }, [functionName, abi, dataArray, parameterOrder, isAllValid])
 
   // Send transaction
   const sendTransactionData = useCallback(async () => {
@@ -490,7 +658,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         throw new Error('No connected wallet address available')
       }
 
-      console.log('Eth call from address:', currentAccount.address)
 
       // Create call object with connected address as from
       const callData = {
@@ -586,28 +753,34 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             )}
 
             {/* Render parameters - ParameterInput handles recursive rendering */}
-            {abi[0]?.inputs && abi[0].inputs.map((input: any, index: number) => (
-              <div key={`${input.name}-${index}`} className={`border rounded-lg p-4 ${
-                validationState.parameters[`param-${index}`] && !validationState.parameters[`param-${index}`].isValid && dataArray[index]
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-gray-200 bg-gray-50'
-              }`}>
-                <ParameterInput
-                  abiInput={input}
-                  dataValue={dataArray[index]}
-                  validation={validationState.parameters[`param-${index}`]}
-                  onUpdate={(newValue) => updateDataValue(index, newValue)}
-                  onRemove={() => removeParameter(index)}
-                  onUpdateName={(newName) => updateParameterName(index, newName)}
-                  onUpdateType={(newType) => updateParameterType(index, newType)}
-                  onAddTupleComponent={(componentName, componentType) => addTupleComponent(index, componentName, componentType)}
-                  onUpdateTupleComponentType={(componentName, newType) => updateTupleComponentType(index, componentName, newType)}
-                  onRemoveTupleComponent={(componentIndex) => removeTupleComponent(index, componentIndex)}
-                  annotation="1"
-                  index={index}
-                />
-              </div>
-            ))}
+            {abi[0]?.inputs && abi[0].inputs.map((input: any, index: number) => {
+              const identifier = input.identifier || parameterOrder[index]
+              const dataValue = identifier ? dataArray.get(identifier) : undefined
+              const validationKey = `param-${identifier || index}`
+
+              return (
+                <div key={`${input.name}-${identifier}`} className={`border rounded-lg p-4 ${
+                  validationState.parameters[validationKey] && !validationState.parameters[validationKey].isValid && dataValue
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <ParameterInput
+                    abiInput={input}
+                    dataValue={dataValue}
+                    validation={validationState.parameters[validationKey]}
+                    onUpdate={(newValue) => updateDataValue({ path: [identifier] }, newValue)}
+                    onRemove={() => removeParameter(identifier)}
+                    onUpdateName={(newName) => updateParameterName(identifier, newName)}
+                    onUpdateType={(newType) => updateParameterType(identifier, newType)}
+                    onAddTupleComponent={(componentName, componentType) => addTupleComponent(identifier, componentName, componentType)}
+                    onUpdateTupleComponentType={(path, newType) => updateTupleComponentType(path, newType)}
+                    onRemoveTupleComponent={(path) => removeTupleComponent(path)}
+                    annotation="1"
+                    currentPath={{ path: [identifier] }}
+                  />
+                </div>
+              )
+            })}
 
             <Button
               onClick={addParameter}
