@@ -1,27 +1,21 @@
 'use client'
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { Card } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
-import { encodeFunctionData, type Address, isAddress } from 'viem'
+import { encodeFunctionData, isAddress } from 'viem'
+import { getDefaultValueForType, validateFunctionName, validateAddress, validateDataValue } from '../../../utils/typeUtils'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
 
-export interface Parameter {
-  id: string
-  name: string
-  type: string
-  value: string
-  components?: Parameter[] // For tuple types
+interface IdentifierPath {
+  path: string[] // Array of identifiers in order - first is parameter, rest are nested components
 }
 
-export interface TransactionData {
-  functionName: string
-  targetAddress: string
-  parameters: Parameter[]
-}
+// Simplified state - just maintain ABI and data array
+// UI parameters are derived from these for interaction
 
 interface ValidationState {
   functionName: { isValid: boolean; message: string }
@@ -29,117 +23,17 @@ interface ValidationState {
   parameters: { [id: string]: { isValid: boolean; message: string } }
 }
 
-interface TransactionBuilderProps {
-  // No props needed
-}
-
-// Validation functions
-const validateFunctionName = (name: string): { isValid: boolean; message: string } => {
-  if (!name.trim()) {
-    return { isValid: false, message: 'Function name is required' }
-  }
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    return { isValid: false, message: 'Invalid function name format' }
-  }
-  return { isValid: true, message: '' }
-}
-
-const validateAddress = (address: string): { isValid: boolean; message: string } => {
-  if (!address.trim()) {
-    return { isValid: false, message: 'Contract address is required' }
-  }
-  if (!isAddress(address)) {
-    return { isValid: false, message: 'Invalid Ethereum address format' }
-  }
-  return { isValid: true, message: '' }
-}
-
-const validateParameter = (parameter: Parameter): { isValid: boolean; message: string } => {
-  if (!parameter.value.trim()) {
-    return { isValid: false, message: 'Parameter value is required' }
-  }
-
-  // Type-specific validation
-  const value = parameter.value.trim()
-  switch (parameter.type) {
-    case 'address':
-      if (!isAddress(value)) {
-        return { isValid: false, message: 'Invalid address format' }
-      }
-      break
-    case 'uint256':
-    case 'uint128':
-    case 'uint64':
-    case 'uint32':
-    case 'uint16':
-    case 'uint8':
-      if (!/^\d+$/.test(value) || BigInt(value) < 0n) {
-        return { isValid: false, message: 'Must be a positive integer' }
-      }
-      break
-    case 'int256':
-    case 'int128':
-    case 'int64':
-    case 'int32':
-    case 'int16':
-    case 'int8':
-      if (!/^-?\d+$/.test(value)) {
-        return { isValid: false, message: 'Must be an integer' }
-      }
-      break
-    case 'bool':
-      if (!['true', 'false'].includes(value.toLowerCase())) {
-        return { isValid: false, message: 'Must be "true" or "false"' }
-      }
-      break
-    case 'bytes':
-    case 'bytes32':
-    case 'bytes16':
-    case 'bytes8':
-    case 'bytes4':
-    case 'bytes2':
-    case 'bytes1':
-      if (!/^0x[0-9a-fA-F]*$/.test(value)) {
-        return { isValid: false, message: 'Must be hex format (0x...)' }
-      }
-      break
-    case 'tuple':
-      if (parameter.components && parameter.components.length > 0) {
-        try {
-          const tupleValue = JSON.parse(value)
-          // Validate each component
-          for (const component of parameter.components) {
-            if (!(component.name in tupleValue)) {
-              return { isValid: false, message: `Missing component: ${component.name}` }
-            }
-            const componentValidation = validateParameter({
-              ...component,
-              value: String(tupleValue[component.name])
-            })
-            if (!componentValidation.isValid) {
-              return { isValid: false, message: `Invalid ${component.name}: ${componentValidation.message}` }
-            }
-          }
-        } catch (error) {
-          return { isValid: false, message: 'Invalid JSON format for tuple' }
-        }
-      } else {
-        return { isValid: false, message: 'Tuple must have components defined' }
-      }
-      break
-  }
-
-  return { isValid: true, message: '' }
-}
 
 const TransactionBuilder = React.memo(function TransactionBuilder() {
   const { currentAccount, sendTransaction, publicClient } = useWalletManager()
 
-  const [transactionData, setTransactionData] = useState<TransactionData>({
-    functionName: '',
-    targetAddress: '',
-    parameters: []
-  })
+  // Core state - maintain ABI and dataArray for viem.encodeFunctionData
+  // Use timestamp-based identifiers for idempotent operations
+  const [abi, setAbi] = useState<any[]>([])
+  const [dataArray, setDataArray] = useState<Map<string, any>>(new Map())
+  const [parameterOrder, setParameterOrder] = useState<string[]>([]) // Maintain order of parameters
+  const [functionName, setFunctionName] = useState<string>('')
+  const [targetAddress, setTargetAddress] = useState<string>('')
 
   const [isEncoding, setIsEncoding] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -150,23 +44,40 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   const [encodedData, setEncodedData] = useState<string>('')
   const [transactionHash, setTransactionHash] = useState<string>('')
   const [callResult, setCallResult] = useState<{ success: boolean; data: string; message: string } | null>(null)
+  const [isEncodedDataInSync, setIsEncodedDataInSync] = useState<boolean>(false)
+
+  // Clear call result and mark encoded data as out of sync when function name or parameters change
+  useEffect(() => {
+    if (callResult) {
+      setCallResult(null)
+    }
+    if (encodedData) {
+      setIsEncodedDataInSync(false)
+    }
+  }, [functionName, abi, dataArray, parameterOrder])
 
   // Validation state
   const validationState = useMemo((): ValidationState => {
-    const functionNameValidation = validateFunctionName(transactionData.functionName)
-    const targetAddressValidation = validateAddress(transactionData.targetAddress)
+    const functionNameValidation = validateFunctionName(functionName)
+    const targetAddressValidation = validateAddress(targetAddress, isAddress)
 
+    // Validate parameters
     const parametersValidation: { [id: string]: { isValid: boolean; message: string } } = {}
-    transactionData.parameters.forEach(param => {
-      parametersValidation[param.id] = validateParameter(param)
-    })
+
+    if (abi.length > 0 && abi[0]?.inputs) {
+      abi[0].inputs.forEach((input: any, index: number) => {
+        const identifier = parameterOrder[index]
+        const value = identifier ? dataArray.get(identifier) : undefined
+        parametersValidation[`param-${identifier || index}`] = validateDataValue(input, value, isAddress)
+      })
+    }
 
     return {
       functionName: functionNameValidation,
       targetAddress: targetAddressValidation,
       parameters: parametersValidation
     }
-  }, [transactionData])
+  }, [functionName, targetAddress, abi, dataArray, parameterOrder])
 
     // Check if all inputs are valid (for encoding - target address not required)
   const isAllValid = useMemo(() => {
@@ -221,315 +132,499 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     return `${baseUrl}${hash}`
   }, [publicClient])
 
-  // Add a new parameter
-  const addParameter = useCallback(() => {
-    const newParameter: Parameter = {
-      id: Date.now().toString(),
-      name: '',
-      type: 'address',
-      value: ''
-    }
+  // Update dataArray value at specific path
+  const updateDataValue = useCallback((path: IdentifierPath, newValue: any) => {
+    setDataArray(prev => {
+      const newMap = new Map(prev)
+      const parameterIdentifier = path.path[0] // First identifier is the parameter
 
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: [...prev.parameters, newParameter]
-    }))
-  }, [])
+      if (path.path.length === 1) {
+        // Simple parameter update
+        newMap.set(parameterIdentifier, newValue)
+      } else {
+        // Nested update - need to update the parameter's nested data
+        const parameterData = newMap.get(parameterIdentifier)
+        if (parameterData && typeof parameterData === 'object') {
+          const newData = { ...parameterData }
 
-  // Add a new tuple component (recursive function to handle nested tuples)
-  const addTupleComponent = useCallback((parameterId: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(param => {
-        // If this is the target parameter (top level)
-        if (param.id === parameterId) {
-          const newComponent: Parameter = {
-            id: Date.now().toString() + Math.random(),
-            name: '',
-            type: 'address',
-            value: ''
-          }
-          const updatedComponents = [...(param.components || []), newComponent]
-          return {
-            ...param,
-            components: updatedComponents
-          }
-        }
+          // Navigate to the nested location and update
+          let current = newData
+          for (let i = 1; i < path.path.length - 1; i++) {
+            const pathSegment = path.path[i]
 
-        // If this parameter has tuple components, search recursively
-        if (param.type === 'tuple' && param.components) {
-          const addComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === parameterId) {
-                const newComponent: Parameter = {
-                  id: Date.now().toString() + Math.random(),
-                  name: '',
-                  type: 'address',
-                  value: ''
-                }
-                return { ...comp, components: [...(comp.components || []), newComponent] }
+            // Check if current is an array (array elements have {value, identifier} structure)
+            if (Array.isArray(current)) {
+              const arrayItem = current.find((item: any) => item.identifier === pathSegment)
+              if (arrayItem) {
+                current = arrayItem
+              } else {
+                // Path doesn't exist, can't update
+                return prev
               }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: addComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...param, components: addComponentsRecursive(param.components) }
-        }
-
-        return param
-      })
-    }))
-  }, [])
-
-  // Remove a parameter (recursive function to handle tuple components at any depth)
-  const removeParameter = useCallback((id: string, parentId?: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(p => {
-        // If this is the target parameter (top level)
-        if (p.id === id) {
-          return null // This will be filtered out
-        }
-
-        // If this parameter has tuple components, search recursively
-        if (p.type === 'tuple' && p.components) {
-          const removeComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.filter(comp => {
-              if (comp.id === id) {
-                return false // Remove this component
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: removeComponentsRecursive(comp.components) }
-              }
-
-              return true
-            })
-          }
-
-          return { ...p, components: removeComponentsRecursive(p.components) }
-        }
-
-        return p
-      }).filter(Boolean) as Parameter[] // Remove null values
-    }))
-  }, [])
-
-  // Update parameter (recursive function to handle tuple components at any depth)
-  const updateParameter = useCallback((id: string, field: keyof Parameter, value: string, parentId?: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      parameters: prev.parameters.map(p => {
-        // If this is the target parameter (top level)
-        if (p.id === id) {
-          if (field === 'components') {
-            // Handle tuple components update
-            try {
-              const components = JSON.parse(value)
-              return { ...p, components }
-            } catch {
-              return p
+            } else if (current[pathSegment] && typeof current[pathSegment] === 'object') {
+              current = current[pathSegment]
+            } else {
+              // Path doesn't exist, can't update
+              return prev
             }
           }
 
-          // Initialize tuple components when type is changed to 'tuple'
-          if (field === 'type' && value === 'tuple' && !p.components) {
-            return { ...p, [field]: value, components: [] }
+          // Update the final value
+          const finalKey = path.path[path.path.length - 1]
+
+          // Check if current is an array item (has {value, identifier} structure)
+          if (current && typeof current === 'object' && 'identifier' in current) {
+            current.value = newValue
+          } else if (current && typeof current === 'object') {
+            current[finalKey] = newValue
           }
 
-          return { ...p, [field]: value }
+          newMap.set(parameterIdentifier, newData)
         }
+      }
 
-        // If this parameter has tuple components, search recursively
-        if (p.type === 'tuple' && p.components) {
-          const updateComponentsRecursive = (components: Parameter[]): Parameter[] => {
-            return components.map(comp => {
-              if (comp.id === id) {
-                if (field === 'type' && value === 'tuple' && !comp.components) {
-                  return { ...comp, [field]: value, components: [] }
-                }
-                return { ...comp, [field]: value }
-              }
-
-              if (comp.type === 'tuple' && comp.components) {
-                return { ...comp, components: updateComponentsRecursive(comp.components) }
-              }
-
-              return comp
-            })
-          }
-
-          return { ...p, components: updateComponentsRecursive(p.components) }
-        }
-
-        return p
-      })
-    }))
-  }, [])
-
-  // Update function name
-  const updateFunctionName = useCallback((functionName: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      functionName
-    }))
-  }, [])
-
-  // Update target address
-  const updateTargetAddress = useCallback((targetAddress: string) => {
-    setTransactionData(prev => ({
-      ...prev,
-      targetAddress
-    }))
-  }, [])
-
-  // Load example transaction
-  const loadExample = useCallback((example: any) => {
-    const parameters = example.parameters.map((p: any) => ({
-      id: Date.now().toString() + Math.random(),
-      name: p.name,
-      type: p.type,
-      value: p.value
-    }))
-
-    setTransactionData({
-      functionName: example.functionName,
-      targetAddress: example.targetAddress,
-      parameters
+      return newMap
     })
   }, [])
 
-  // Encode function data
-  const encodeData = useCallback(async () => {
-    console.log('🔧 Encode function called!')
-    console.log('Current transactionData:', transactionData)
+  // Add a new parameter
+  // Helper function to find component by path
+  const findComponentByPath = useCallback((abi: any[], path: string[]) => {
+    if (path.length === 0 || abi.length === 0) return null
 
+    // Find parameter by first identifier
+    const parameterIndex = abi[0].inputs.findIndex((input: any) => input.identifier === path[0])
+    if (parameterIndex === -1) return null
+
+    let current = abi[0].inputs[parameterIndex]
+
+    // Navigate through the remaining path to find the target component
+    for (let i = 1; i < path.length; i++) {
+      const pathSegment = path[i]
+      if (current.components && Array.isArray(current.components)) {
+        const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+        if (componentIndex !== -1) {
+          current = current.components[componentIndex]
+        } else {
+          return null
+        }
+      } else {
+        return null
+      }
+    }
+
+    return current
+  }, [])
+
+  // Add component to ABI structure (unified for parameters and tuple components)
+  const addComponent = useCallback((target?: string | IdentifierPath, name?: string, type?: string) => {
+    const componentIdentifier = Date.now().toString()
+
+    // Default values for top-level parameters
+    const componentName = name || `param${parameterOrder.length}`
+    const componentType = type || 'address'
+
+    setAbi(prev => {
+      if (prev.length === 0) {
+        // Create new ABI function with first parameter
+        return [{
+          type: 'function',
+          name: functionName || 'newFunction',
+          stateMutability: 'nonpayable',
+          inputs: [{
+            name: componentName,
+            type: componentType,
+            identifier: componentIdentifier
+          }],
+          outputs: []
+        }]
+      }
+
+      const newAbi = [...prev]
+
+      // If no target specified, add as top-level parameter
+      if (!target) {
+        // Check if the last parameter is already a default parameter (idempotent operation)
+        if (newAbi[0]?.inputs && newAbi[0].inputs.length > 0) {
+          const lastInput = newAbi[0].inputs[newAbi[0].inputs.length - 1]
+          if (lastInput.name === `param${newAbi[0].inputs.length - 1}` && lastInput.type === 'address') {
+            return prev // Skip if last parameter is already a default parameter (idempotent)
+          }
+        }
+
+        // Check if parameter with same name and type already exists (idempotent)
+        const existingParameter = newAbi[0].inputs.find(
+          (input: any) => input.name === componentName && input.type === componentType
+        )
+        if (existingParameter) {
+          return prev // Skip if parameter already exists (idempotent)
+        }
+
+        newAbi[0].inputs.push({
+          name: componentName,
+          type: componentType,
+          identifier: componentIdentifier
+        })
+
+        setParameterOrder(prev => [...prev, componentIdentifier])
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          newMap.set(componentIdentifier, '')
+          return newMap
+        })
+      } else {
+        // Add as tuple component
+        const isPath = typeof target === 'object' && target.path && Array.isArray(target.path)
+        const path = isPath ? target.path : [target as string]
+
+        if (path.length === 0) return prev // Skip if no path (idempotent)
+
+        const current = findComponentByPath(newAbi, path)
+        if (!current) return prev // Skip if component not found (idempotent)
+
+        // Ensure the target has components array
+        if (!current.components) {
+          current.components = []
+        }
+
+        // Check if we're trying to add a component that already exists (idempotent)
+        const existingComponent = current.components.find(
+          (comp: any) => comp.name === componentName && comp.type === componentType
+        )
+        if (existingComponent) {
+          return prev // Skip if component already exists (idempotent)
+        }
+
+        // Add the new component
+        current.components.push({
+          name: componentName,
+          type: componentType,
+          identifier: componentIdentifier
+        })
+      }
+
+      return newAbi
+    })
+  }, [abi, functionName, parameterOrder.length])
+
+  // Remove component from ABI structure (unified for parameters and tuple components)
+  const removeComponent = useCallback((identifier: string | IdentifierPath) => {
+    // Handle both string identifier (top-level parameter) and IdentifierPath (nested component)
+    const path = typeof identifier === 'string' ? [identifier] : identifier.path
+    if (path.length === 0) return // Skip if no path (idempotent)
+
+    // Track whether ABI removal was successful
+    let abiRemovalSuccessful = false
+    let componentName: string | null = null
+
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+
+      // Find parameter by first identifier
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path[0])
+      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
+
+      if (path.length === 1) {
+        // This is a top-level parameter removal
+        const targetIdentifier = path[0]
+
+        // Skip if identifier doesn't exist in parameter order (idempotent operation)
+        if (!parameterOrder.includes(targetIdentifier)) {
+          return prev
+        }
+
+        newAbi[0] = {
+          ...newAbi[0],
+          inputs: newAbi[0].inputs.filter((input: any) => input.identifier !== targetIdentifier)
+        }
+        abiRemovalSuccessful = true
+      } else {
+        // This is a tuple component removal
+        // Navigate to the component to get its name before removing
+        let current = newAbi[0].inputs[parameterIndex]
+        for (let i = 1; i < path.length; i++) {
+          const pathSegment = path[i]
+          if (current.components && Array.isArray(current.components)) {
+            const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+            if (componentIndex !== -1) {
+              current = current.components[componentIndex]
+              if (i === path.length - 1) {
+                componentName = current.name // This is the component to be removed
+              }
+            }
+          }
+        }
+
+        // Navigate to the parent component
+        current = newAbi[0].inputs[parameterIndex]
+        for (let i = 1; i < path.length - 1; i++) {
+          const pathSegment = path[i]
+          if (current.components && Array.isArray(current.components)) {
+            const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+            if (componentIndex !== -1) {
+              current = current.components[componentIndex]
+            } else {
+              return prev // Skip if component not found (idempotent)
+            }
+          }
+        }
+
+        // Remove the component at the final identifier (idempotent operation)
+        const finalIdentifier = path[path.length - 1]
+        if (current.components) {
+          const componentExists = current.components.some((comp: any) => comp.identifier === finalIdentifier)
+          if (componentExists) {
+            current.components = current.components.filter((comp: any) => comp.identifier !== finalIdentifier)
+            abiRemovalSuccessful = true // Mark ABI removal as successful
+          }
+        }
+      }
+
+      return newAbi
+    })
+
+    // Handle data removal based on the type of component
+    if (abiRemovalSuccessful) {
+      if (path.length === 1) {
+        // Top-level parameter removal
+        const targetIdentifier = path[0]
+        setParameterOrder(prev => prev.filter(id => id !== targetIdentifier))
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(targetIdentifier)
+          return newMap
+        })
+      } else if (componentName) {
+        // Tuple component removal
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          const parameterIdentifier = path[0]
+          const parameterData = newMap.get(parameterIdentifier)
+
+          if (parameterData) {
+            // Check if this is an array (tuple[])
+            if (Array.isArray(parameterData)) {
+              // For tuple[] arrays, remove the component from all tuples
+              const newArray = parameterData.map((item: any) => {
+                if (item && typeof item === 'object' && item.value && typeof item.value === 'object') {
+                  const newValue = { ...item.value }
+                  delete newValue[componentName!]
+                  return { ...item, value: newValue }
+                }
+                return item
+              })
+              newMap.set(parameterIdentifier, newArray)
+            } else if (typeof parameterData === 'object') {
+              // For single tuples, remove the component by name
+              const newData = { ...parameterData }
+              delete newData[componentName!]
+              newMap.set(parameterIdentifier, newData)
+            }
+          }
+
+          return newMap
+        })
+      }
+    }
+  }, [parameterOrder])
+
+
+  // Update component properties in ABI structure (unified for parameters and tuple components)
+  const updateComponent = useCallback((identifier: string | IdentifierPath, updates: { name?: string; type?: string }) => {
+    let oldName: string | undefined
+
+    // Get the old name before updating ABI for data migration
+    if (updates.name !== undefined && typeof identifier !== 'string') {
+      const path = identifier.path
+      if (path.length > 1) { // This is a nested component (tuple component)
+        const current = findComponentByPath(abi, path)
+        oldName = current?.name
+      }
+    }
+
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+
+      // Handle both string identifier (top-level parameter) and IdentifierPath (nested component)
+      const path = typeof identifier === 'string' ? [identifier] : identifier.path
+      if (path.length === 0) return prev // Skip if no path (idempotent)
+
+      const current = findComponentByPath(newAbi, path)
+      if (!current) return prev // Skip if component not found (idempotent)
+
+      // Update the component properties
+      if (updates.name !== undefined) {
+        current.name = updates.name
+      }
+      if (updates.type !== undefined) {
+        current.type = updates.type
+      }
+
+      return newAbi
+    })
+
+    // Handle data migration for tuple component name changes
+    if (updates.name !== undefined && oldName && oldName !== updates.name && typeof identifier !== 'string') {
+      const path = identifier.path
+      if (path.length > 1) { // This is a nested component (tuple component)
+        const parentIdentifier = path[0] // Root parameter identifier
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          const parentData = newMap.get(parentIdentifier)
+
+          if (parentData && typeof parentData === 'object' && oldName in parentData && updates.name) {
+            const newParentData = { ...parentData }
+            newParentData[updates.name] = newParentData[oldName]
+            delete newParentData[oldName]
+            newMap.set(parentIdentifier, newParentData)
+          }
+
+          return newMap
+        })
+      }
+    }
+
+    // Reset data value when type changes to prevent type mismatches
+    if (updates.type !== undefined) {
+      const targetIdentifier = typeof identifier === 'string' ? identifier : identifier.path[identifier.path.length - 1]
+      setDataArray(prev => {
+        const newMap = new Map(prev)
+        newMap.set(targetIdentifier, '') // Clear the value for the changed component
+        return newMap
+      })
+    }
+  }, [findComponentByPath, abi])
+
+
+
+
+
+
+  // Load example ABI transaction
+  const loadExample = useCallback((example: any) => {
+    const abiFunction = example.abi[0]
+
+    setFunctionName(abiFunction.name)
+    setTargetAddress(example.targetAddress)
+
+    // Helper function to add identifiers to ABI components recursively
+    const addIdentifiersToAbi = (inputs: any[], dataValues: any[]): { abi: any[], dataMap: Map<string, any>, parameterOrder: string[] } => {
+      const dataMap = new Map()
+      const parameterOrder: string[] = []
+
+      const processedInputs = inputs.map((input: any, index: number) => {
+        const identifier = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+        const dataValue = dataValues[index]
+
+        // Handle tuple components recursively
+        if (input.components && Array.isArray(input.components)) {
+          // Just add identifiers to tuple components - keep the data structure simple
+          const processedComponents = input.components.map((comp: any) => ({
+            ...comp,
+            identifier: Date.now().toString() + Math.random().toString(36).substr(2, 9)
+          }))
+
+          // For tuple[] types, structure the data properly
+          if (input.type.endsWith('[]') && Array.isArray(dataValue)) {
+            const structuredData = dataValue.map((item: any) => ({
+              identifier: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+              value: item
+            }))
+            dataMap.set(identifier, structuredData)
+          } else {
+            // For single tuples, store the data as-is
+            dataMap.set(identifier, dataValue)
+          }
+
+          parameterOrder.push(identifier)
+
+          return {
+            ...input,
+            identifier,
+            components: processedComponents
+          }
+        }
+
+        // Store data value
+        dataMap.set(identifier, dataValue)
+        parameterOrder.push(identifier)
+
+        return {
+          ...input,
+          identifier
+        }
+      })
+
+      return { abi: processedInputs, dataMap, parameterOrder }
+    }
+
+    // Process the ABI and data
+    const { abi: processedAbi, dataMap: newDataMap, parameterOrder: newParameterOrder } =
+      addIdentifiersToAbi(abiFunction.inputs, example.data || [])
+
+    // Create the new ABI structure
+    const newAbi = [{
+      ...abiFunction,
+      inputs: processedAbi
+    }]
+
+    setAbi(newAbi)
+    setDataArray(newDataMap)
+    setParameterOrder(newParameterOrder)
+
+  }, [])
+
+  // Encode function data using the ABI structure
+  const encodeData = useCallback(async () => {
     if (!isAllValid) {
+      return
+    }
+
+    if (!functionName || !abi[0] || parameterOrder.length === 0) {
       return
     }
 
     setIsEncoding(true)
 
     try {
-      // Recursive function to build ABI inputs with tuple support
-      const buildAbiInputs = (params: Parameter[]) => {
-        return params.map(p => {
-          const input: any = {
-            name: p.name,
-            type: p.type
-          }
-
-          if (p.type === 'tuple' && p.components && p.components.length > 0) {
-            input.components = buildAbiInputs(p.components)
-          }
-
-          return input
-        })
-      }
-
-      // Create ABI item object
+      // Create ABI item with the current function name
       const abiItem = {
-        inputs: buildAbiInputs(transactionData.parameters),
-        name: transactionData.functionName,
-        outputs: [], // TODO: We'll assume no outputs for now, can be enhanced later
-        stateMutability: 'nonpayable', // TODO: Default to nonpayable, can be enhanced later
-        type: 'function'
+        ...abi[0],
+        name: functionName
       }
 
-      console.log('ABI item:', abiItem)
-      console.log('transactionData', transactionData)
+      // Filter out empty values and validate before encoding
+      const validDataArray = parameterOrder.map((identifier, index) => {
+        const input = abi[0].inputs[index]
+        const value = dataArray.get(identifier)
+        if (!input) return value
 
-      // Recursive function to encode values with tuple support
-      const encodeValues = (params: Parameter[]): any[] => {
-        return params.map(p => {
-          const value = p.value.trim()
-
-          // Handle tuple types
-          if (p.type === 'tuple' && p.components && p.components.length > 0) {
-            // For tuples, we need to parse the JSON value and encode each component
-            try {
-              const tupleValue = JSON.parse(value)
-              const encodedTuple: any[] = encodeValues(p.components).map((_: any, index: number) => {
-                const componentValue = tupleValue[p.components![index].name]
-                if (componentValue === undefined) {
-                  throw new Error(`Missing component ${p.components![index].name} in tuple ${p.name}`)
-                }
-                return encodeSingleValue(p.components![index], componentValue)
-              })
-              return encodedTuple
-            } catch (error) {
-              throw new Error(`Invalid tuple format for parameter ${p.name}: ${error instanceof Error ? error.message : String(error)}`)
-            }
-          }
-
-          return encodeSingleValue(p, value)
-        })
-      }
-
-      // Helper function to encode a single value
-      const encodeSingleValue = (param: Parameter, value: any) => {
-        const stringValue = String(value).trim()
-
-        switch (param.type) {
-          case 'address':
-            if (!isAddress(stringValue)) {
-              throw new Error(`Invalid address format for parameter ${param.name}`)
-            }
-            return stringValue as Address
-          case 'uint256':
-          case 'uint':
-          case 'uint8':
-          case 'uint16':
-          case 'uint32':
-          case 'uint64':
-          case 'uint128':
-            return BigInt(stringValue)
-          case 'int256':
-          case 'int':
-          case 'int8':
-          case 'int16':
-          case 'int32':
-          case 'int64':
-          case 'int128':
-            return BigInt(stringValue)
-          case 'bool':
-            return stringValue === 'true'
-          case 'string':
-          case 'bytes':
-          case 'bytes32':
-          case 'bytes16':
-          case 'bytes8':
-          case 'bytes4':
-          case 'bytes2':
-          case 'bytes1':
-            return stringValue
-          default:
-            return stringValue
+        // Skip empty values for required fields
+        if (value === '' || value === null || value === undefined) {
+          throw new Error(`Parameter ${index} (${input.name}) is required but empty`)
         }
-      }
 
-      // Prepare values for encoding
-      const values = encodeValues(transactionData.parameters)
+        return value
+      })
 
-      // Encode the function data
+      // Use filtered dataArray - it's already in the correct format for viem
       const encodedData = encodeFunctionData({
         abi: [abiItem],
-        args: values
+        args: validDataArray
       })
-      console.log('encodedData', encodedData)
 
       setEncodedData(encodedData)
+      setIsEncodedDataInSync(true)
     } catch (error) {
       console.error('Encoding error:', error)
+      setEncodedData('')
+      setIsEncodedDataInSync(false)
     } finally {
       setIsEncoding(false)
     }
-  }, [transactionData, isAllValid])
+  }, [functionName, abi, dataArray, parameterOrder, isAllValid])
 
   // Send transaction
   const sendTransactionData = useCallback(async () => {
@@ -541,7 +636,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
-    if (!transactionData.targetAddress.trim()) {
+    if (!targetAddress.trim()) {
       return
     }
 
@@ -550,7 +645,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     try {
       // Create transaction object
       const tx = {
-        to: transactionData.targetAddress as `0x${string}`,
+        to: targetAddress as `0x${string}`,
         data: encodedData,
         value: 0n
       }
@@ -563,7 +658,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsSending(false)
     }
-  }, [currentAccount, encodedData, transactionData.targetAddress, sendTransaction])
+  }, [currentAccount, encodedData, targetAddress, sendTransaction])
 
   // Eth call function
   const callTransaction = useCallback(async () => {
@@ -571,7 +666,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
-    if (!transactionData.targetAddress.trim()) {
+    if (!targetAddress.trim()) {
       return
     }
 
@@ -584,14 +679,22 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return
     }
 
+
     setIsCalling(true)
 
     try {
-      // Create call object
+      // Ensure we have a valid address
+      if (!currentAccount?.address) {
+        throw new Error('No connected wallet address available')
+      }
+
+
+      // Create call object with connected address as from
       const callData = {
-        to: transactionData.targetAddress as `0x${string}`,
+        to: targetAddress as `0x${string}`,
         data: encodedData as `0x${string}`,
-        value: 0n
+        value: 0n,
+        account: currentAccount.address as `0x${string}`
       }
 
       // Perform actual eth_call
@@ -633,7 +736,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsCalling(false)
     }
-  }, [encodedData, transactionData.targetAddress, publicClient])
+  }, [encodedData, targetAddress, publicClient, currentAccount])
 
   return (
     <div className="space-y-6">
@@ -647,92 +750,75 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             <input
               id="functionName"
               type="text"
-              value={transactionData.functionName}
-              onChange={(e) => updateFunctionName(e.target.value)}
+              value={functionName}
+              onChange={(e) => setFunctionName(e.target.value)}
               placeholder="e.g., transfer, approve, mint"
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:border-transparent ${
-                transactionData.functionName.trim()
+                functionName.trim()
                   ? validationState.functionName.isValid
                     ? 'border-green-300 focus:ring-green-500'
                     : 'border-red-300 focus:ring-red-500'
                   : 'border-gray-300 focus:ring-blue-500'
               }`}
             />
-            {transactionData.functionName.trim() && !validationState.functionName.isValid && (
+            {functionName.trim() && !validationState.functionName.isValid && (
               <p className="mt-1 text-sm text-red-600">{validationState.functionName.message}</p>
             )}
           </div>
         </div>
       </Card>
 
-      {/* Parameters */}
-      <Card title="Function Parameters" subtitle="Add and configure function parameters">
-        <div className="space-y-4">
-                      {/* Column headers - only show when there are parameters */}
-            {transactionData.parameters.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
-                <div className="text-sm font-medium text-gray-700 text-center">Depth</div>
+        {/* Parameters */}
+        <Card title="Function Parameters" subtitle="Configure function parameters">
+          <div className="space-y-4">
+            {/* Column headers - only show when there are parameters */}
+            {abi[0]?.inputs && abi[0].inputs.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-11 gap-4 px-4">
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
-                <div className="text-sm font-medium text-gray-700 md:col-span-2">Type</div>
-                <div className="text-sm font-medium text-gray-700 md:col-span-6">Value</div>
-                <div className="text-sm font-medium text-gray-700 text-center">Delete</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-3">Type</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-5">Value</div>
+                <div className="text-sm font-medium text-gray-700 text-center md:col-span-1">Delete</div>
               </div>
             )}
 
-          {/* Flatten parameters and their tuple components for rendering */}
-          {(() => {
-            const flattenedRows: Array<{
-              parameter: Parameter
-              depth: number
-              parentId?: string
-              isTupleComponent: boolean
-            }> = []
+            {/* Render parameters - ParameterInput handles recursive rendering */}
+            {abi[0]?.inputs && abi[0].inputs.map((input: any, index: number) => {
+              const identifier = input.identifier || parameterOrder[index]
+              const dataValue = identifier ? dataArray.get(identifier) : undefined
+              const validationKey = `param-${identifier || index}`
 
-            const addParameterWithComponents = (param: Parameter, depth: number = 0, parentId?: string) => {
-              // Add the main parameter
-              flattenedRows.push({
-                parameter: param,
-                depth,
-                parentId,
-                isTupleComponent: depth > 0
-              })
+              return (
+                <div key={identifier} className={`border rounded-lg p-4 ${
+                  validationState.parameters[validationKey] && !validationState.parameters[validationKey].isValid && dataValue
+                    ? 'border-red-300 bg-red-50'
+                    : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <ParameterInput
+                    abiInput={input}
+                    dataValue={dataValue}
+                    validation={validationState.parameters[validationKey]}
+                    onUpdate={(newValue) => updateDataValue({ path: [identifier] }, newValue)}
+                    onRemove={() => removeComponent(identifier)}
+                    onUpdateName={(newName) => updateComponent(identifier, { name: newName })}
+                    onUpdateType={(newType) => updateComponent(identifier, { type: newType })}
+                    onAddComponent={(target, componentName, componentType) => addComponent(target, componentName, componentType)}
+                    onUpdateComponent={(path, updates) => updateComponent(path, updates)}
+                    onRemoveComponent={(path) => removeComponent(path)}
+                    currentPath={{ path: [identifier] }}
+                  />
+                </div>
+              )
+            })}
 
-              // Add tuple components if this is a tuple
-              if (param.type === 'tuple' && param.components) {
-                param.components.forEach(component => {
-                  addParameterWithComponents(component, depth + 1, param.id)
-                })
-              }
-            }
-
-            transactionData.parameters.forEach(param => {
-              addParameterWithComponents(param)
-            })
-
-            return flattenedRows.map(({ parameter, depth, parentId, isTupleComponent }) => (
-              <ParameterInput
-                key={parameter.id}
-                parameter={parameter}
-                depth={depth}
-                parentId={parentId}
-                isTupleComponent={isTupleComponent}
-                validation={validationState.parameters[parameter.id]}
-                onUpdate={(field, value) => updateParameter(parameter.id, field, value)}
-                onRemove={() => removeParameter(parameter.id)}
-                onAddTupleComponent={() => addTupleComponent(parameter.id)}
-              />
-            ))
-          })()}
-
-          <Button
-            onClick={addParameter}
-            variant="outline"
-            className="w-full"
-          >
-            ➕ Add Parameter
-          </Button>
-        </div>
-      </Card>
+            <Button
+              onClick={() => addComponent()}
+              variant="outline"
+              className="w-full"
+            >
+              ➕ Add Parameter
+            </Button>
+          </div>
+        </Card>
 
       {/* Action Buttons */}
       <Card title="Transaction Actions" subtitle={`Encode and execute your transaction${publicClient?.chain?.name ? ` on ${publicClient.chain.name}` : ''}`}>
@@ -748,9 +834,11 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               🔧 Encode Data {!isAllValid ? '(Fix validation errors)' : ''}
             </Button>
             {encodedData && (
-              <div className="bg-gray-100 p-3 rounded-md">
+              <div className={`p-3 rounded-md ${isEncodedDataInSync ? 'bg-gray-100' : 'bg-yellow-50 border border-yellow-200'}`}>
                 <div className="flex justify-between items-center mb-1">
-                  <div className="text-sm font-medium text-gray-700">Encoded Data:</div>
+                  <div className={`text-sm font-medium ${isEncodedDataInSync ? 'text-gray-700' : 'text-yellow-700'}`}>
+                    Encoded Data: {!isEncodedDataInSync && <span className="text-yellow-600">(Out of Sync)</span>}
+                  </div>
                   <Button
                     onClick={() => copyToClipboard(encodedData)}
                     loading={isCopying}
@@ -761,7 +849,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     📋 Copy
                   </Button>
                 </div>
-                <div className="text-xs font-mono text-gray-600 break-all">{encodedData}</div>
+                <div className={`text-xs font-mono break-all ${isEncodedDataInSync ? 'text-gray-600' : 'text-yellow-600'}`}>{encodedData}</div>
               </div>
             )}
           </div>
@@ -772,17 +860,17 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               Target Contract Address
             </label>
             <AddressSelector
-              value={transactionData.targetAddress}
-              onChange={updateTargetAddress}
+              value={targetAddress}
+              onChange={setTargetAddress}
               placeholder="Select contract address..."
-              className={transactionData.targetAddress.trim()
+              className={targetAddress.trim()
                 ? validationState.targetAddress.isValid
                   ? 'border-green-300 focus:ring-green-500'
                   : 'border-red-300 focus:ring-red-500'
                 : ''
               }
             />
-            {transactionData.targetAddress.trim() && !validationState.targetAddress.isValid && (
+            {targetAddress.trim() && !validationState.targetAddress.isValid && (
               <p className="mt-1 text-sm text-red-600">{validationState.targetAddress.message}</p>
             )}
           </div>
@@ -794,7 +882,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               <Button
                 onClick={callTransaction}
                 loading={isCalling}
-                disabled={!encodedData || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                disabled={!encodedData || !targetAddress.trim() || !validationState.targetAddress.isValid || !currentAccount}
                 variant="outline"
                 className="w-full"
               >
@@ -817,7 +905,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               <Button
                 onClick={sendTransactionData}
                 loading={isSending}
-                disabled={!encodedData || !currentAccount || !transactionData.targetAddress.trim() || !validationState.targetAddress.isValid}
+                disabled={!encodedData || !currentAccount || !targetAddress.trim() || !validationState.targetAddress.isValid}
                 variant="success"
                 className="w-full"
               >
@@ -853,7 +941,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         </div>
       </Card>
 
-      {/* Example Transactions */}
+      {/* Example ABI Transactions */}
       <ExampleTransactions onLoadExample={loadExample} />
     </div>
   )

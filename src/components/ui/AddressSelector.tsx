@@ -3,9 +3,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
+import { saveRecentAddress, getRecentAddresses } from '../../utils/typeUtils'
 import { matchesSearchTerm, getSearchScore, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
+import SearchPreview from './SearchPreview'
 
 interface AddressSelectorProps {
   value: string
@@ -16,32 +18,9 @@ interface AddressSelectorProps {
   defaultValue?: string
 }
 
-// localStorage utilities for recent addresses
-const saveRecentAddress = (address: string) => {
-  // Only save valid Ethereum addresses to localStorage
-  if (!isAddress(address)) {
-    console.warn('Attempted to save invalid address to localStorage:', address)
-    return
-  }
-
-  const key = 'recent_addresses'
-  const recent = JSON.parse(localStorage.getItem(key) || '[]')
-  const updated = [address, ...recent.filter((v: string) => v !== address)].slice(0, 5)
-  localStorage.setItem(key, JSON.stringify(updated))
-}
-
-const getRecentAddresses = (): string[] => {
-  const key = 'recent_addresses'
-  const addresses = JSON.parse(localStorage.getItem(key) || '[]')
-  // Filter out any invalid addresses that might exist in localStorage
-  const validAddresses = addresses.filter((addr: string) => isAddress(addr))
-
-  // If we filtered out invalid addresses, update localStorage
-  if (validAddresses.length !== addresses.length) {
-    localStorage.setItem(key, JSON.stringify(validAddresses))
-  }
-
-  return validAddresses
+// Get recent addresses using the utility function
+const getRecentAddressesList = (): string[] => {
+  return getRecentAddresses(isAddress)
 }
 
 export default function AddressSelector({
@@ -105,7 +84,7 @@ export default function AddressSelector({
   }).filter(cat => cat.count > 0)
 
   // Get recent addresses that aren't in config
-  const recentAddresses = getRecentAddresses().filter(addr =>
+  const recentAddresses = getRecentAddressesList().filter(addr =>
     !allConfigAddresses.has(addr.toLowerCase())
   )
 
@@ -149,7 +128,7 @@ export default function AddressSelector({
 
   const handleSelect = useCallback((address: string) => {
     onChange(address)
-    saveRecentAddress(address)
+    saveRecentAddress(address, isAddress)
     setIsOpen(false)
     setSearchTerm('')
     setSelectedIndex(-1)
@@ -207,10 +186,10 @@ export default function AddressSelector({
     })
   }, [])
 
-  // Reset selected index when search term changes
+  // Set selected index to first result when search term changes
   useEffect(() => {
-    setSelectedIndex(-1)
-  }, [searchTerm])
+    setSelectedIndex(allFilteredAddresses.length > 0 ? 0 : -1)
+  }, [searchTerm, allFilteredAddresses.length])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -260,36 +239,6 @@ export default function AddressSelector({
     ? allFilteredAddresses[selectedIndex].address
     : null
 
-  // Create preview text with greyed out parts
-  const getPreviewText = () => {
-    if (!selectedAddress || !searchTerm.trim()) {
-      return searchTerm
-    }
-
-    const searchLower = searchTerm.toLowerCase()
-    const addressLower = selectedAddress.toLowerCase()
-
-    // Find where the search term matches in the address
-    const matchIndex = addressLower.indexOf(searchLower)
-
-    if (matchIndex === -1) {
-      return searchTerm
-    }
-
-    // Split the address into parts: before match, match, after match
-    const beforeMatch = selectedAddress.substring(0, matchIndex)
-    const match = selectedAddress.substring(matchIndex, matchIndex + searchTerm.length)
-    const afterMatch = selectedAddress.substring(matchIndex + searchTerm.length)
-
-    return (
-      <>
-        <span className="text-gray-400">{beforeMatch}</span>
-        <span className="text-gray-900">{match}</span>
-        <span className="text-gray-400">{afterMatch}</span>
-      </>
-    )
-  }
-
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {/* Trigger Button */}
@@ -335,38 +284,25 @@ export default function AddressSelector({
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-hidden">
           {/* Search Input */}
-          <div className="p-2 border-b border-gray-200">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Search addresses or type a new address..."
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-transparent relative z-10"
-                autoFocus
-              />
-              {/* Preview overlay */}
-              {selectedAddress && searchTerm.trim() && (
-                <div className="absolute inset-0 px-2 py-1 text-sm pointer-events-none">
-                  <div className="font-mono">
-                    {getPreviewText()}
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="p-2 border-b border-gray-200 relative">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={handleSearchChange}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search addresses or type a new address..."
+              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              autoFocus
+            />
+            {/* Preview overlay */}
+            <SearchPreview
+              searchTerm={searchTerm}
+              selectedValue={selectedAddress}
+            />
             {isSearchTermValidAddress && filteredCategories.length === 0 && (
               <p className="mt-1 text-xs text-blue-600">
                 Press Enter to add this address
               </p>
-            )}
-            {allFilteredAddresses.length > 0 && (
-              <div className="mt-1 text-xs text-gray-500">
-                <p>Use Tab/Arrow keys to navigate, Enter to select</p>
-                     <p className="text-gray-400 mt-1">
-                       💡 Try: "eoa user0", "group1.set2", fuzzy matching, or advanced operators (!, ^, $)
-                     </p>
-              </div>
             )}
             {searchTerm && filteredCategories.length === 0 && !isSearchTermValidAddress && (
               <p className="mt-1 text-xs text-gray-500">
