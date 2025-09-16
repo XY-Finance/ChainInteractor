@@ -28,9 +28,9 @@ interface ParameterInputProps {
   onRemove?: () => void
   onUpdateName?: (newName: string) => void
   onUpdateType?: (newType: string) => void
-  onAddTupleComponent?: (target: string | IdentifierPath, componentName: string, componentType: string) => void
-  onUpdateTupleComponentType?: (path: IdentifierPath, newType: string) => void
-  onRemoveTupleComponent?: (path: IdentifierPath) => void
+  onAddComponent?: (target: string | IdentifierPath, componentName: string, componentType: string) => void
+  onUpdateComponent?: (path: IdentifierPath, updates: { name?: string; type?: string }) => void
+  onRemoveComponent?: (path: IdentifierPath) => void
   annotation?: string
   disabled?: boolean
   arrayParent?: ArrayParent | null
@@ -68,9 +68,9 @@ const ParameterInput = React.memo(function ParameterInput({
   onRemove,
   onUpdateName,
   onUpdateType,
-  onAddTupleComponent,
-  onUpdateTupleComponentType,
-  onRemoveTupleComponent,
+  onAddComponent,
+  onUpdateComponent,
+  onRemoveComponent,
   annotation = "1",
   disabled = false,
   arrayParent = null,
@@ -264,9 +264,9 @@ const ParameterInput = React.memo(function ParameterInput({
     const componentName = `${identifier}`
 
     // Add a default component to the ABI structure
-    if (onAddTupleComponent) {
+    if (onAddComponent) {
       // Use the unified function that handles both top-level and nested tuples
-      onAddTupleComponent(currentPath, componentName, "address")
+      onAddComponent(currentPath, componentName, "address")
     }
 
     // Initialize or update the tuple data structure
@@ -480,9 +480,9 @@ const ParameterInput = React.memo(function ParameterInput({
                   validation={validation}
                   onUpdate={(newValue) => handleArrayUpdate(item.identifier, newValue)}
                   onRemove={() => handleArrayRemove(item.identifier)}
-                  onAddTupleComponent={onAddTupleComponent}
-                  onUpdateTupleComponentType={onUpdateTupleComponentType}
-                  onRemoveTupleComponent={onRemoveTupleComponent}
+                  onAddComponent={onAddComponent}
+                  onUpdateComponent={onUpdateComponent}
+                  onRemoveComponent={onRemoveComponent}
                   annotation={elementAnnotation}
                   disabled={elementType !== 'tuple'}
                   arrayParent={arrayParent ? { ...arrayParent } : { path: currentPath.path }}
@@ -510,18 +510,22 @@ const ParameterInput = React.memo(function ParameterInput({
                   onUpdate={(newValue) => handleTupleUpdate(componentIdentifier, newValue)}
                   onRemove={() => {
                     // Remove from ABI structure (this should also handle data removal)
-                    if (onRemoveTupleComponent) {
-                      onRemoveTupleComponent({ path: [...currentPath.path, componentIdentifier] })
+                    if (onRemoveComponent) {
+                      onRemoveComponent({ path: [...currentPath.path, componentIdentifier] })
                     }
                   }}
-                  onUpdateName={onUpdateName}
+                  onUpdateName={(newName) => {
+                    if (onUpdateComponent) {
+                      onUpdateComponent({ path: [...currentPath.path, componentIdentifier] }, { name: newName })
+                    }
+                  }}
                   onUpdateType={(newType) => {
-                    if (onUpdateTupleComponentType) {
-                      onUpdateTupleComponentType({ path: [...currentPath.path, componentIdentifier] }, newType)
+                    if (onUpdateComponent) {
+                      onUpdateComponent({ path: [...currentPath.path, componentIdentifier] }, { type: newType })
                     }
                   }}
-                  onAddTupleComponent={onAddTupleComponent}
-                  onRemoveTupleComponent={onRemoveTupleComponent}
+                  onAddComponent={onAddComponent}
+                  onRemoveComponent={onRemoveComponent}
                   annotation={""}
                   disabled={false}
                   arrayParent={arrayParent ? { ...arrayParent, path: [...arrayParent.path, componentIdentifier] } : null}

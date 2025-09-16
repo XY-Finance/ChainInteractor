@@ -279,298 +279,286 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   }, [])
 
   // Add a new parameter
-  const addParameter = useCallback(() => {
-    // Check if the last parameter is already a default parameter (idempotent operation)
-    if (abi.length > 0 && abi[0]?.inputs && abi[0].inputs.length > 0) {
-      const lastInput = abi[0].inputs[abi[0].inputs.length - 1]
-      if (lastInput.name === `param${abi[0].inputs.length - 1}` && lastInput.type === 'address') {
-        return // Skip if last parameter is already a default parameter (idempotent)
+  // Helper function to find component by path
+  const findComponentByPath = useCallback((abi: any[], path: string[]) => {
+    if (path.length === 0 || abi.length === 0) return null
+
+    // Find parameter by first identifier
+    const parameterIndex = abi[0].inputs.findIndex((input: any) => input.identifier === path[0])
+    if (parameterIndex === -1) return null
+
+    let current = abi[0].inputs[parameterIndex]
+
+    // Navigate through the remaining path to find the target component
+    for (let i = 1; i < path.length; i++) {
+      const pathSegment = path[i]
+      if (current.components && Array.isArray(current.components)) {
+        const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+        if (componentIndex !== -1) {
+          current = current.components[componentIndex]
+        } else {
+          return null
+        }
+      } else {
+        return null
       }
     }
 
-    const identifier = Date.now().toString()
-    const newInput = {
-      name: `param${parameterOrder.length}`,
-      type: 'address',
-      identifier // Add identifier to input for reference
-    }
+    return current
+  }, [])
+
+  // Add component to ABI structure (unified for parameters and tuple components)
+  const addComponent = useCallback((target?: string | IdentifierPath, name?: string, type?: string) => {
+    const componentIdentifier = Date.now().toString()
+
+    // Default values for top-level parameters
+    const componentName = name || `param${parameterOrder.length}`
+    const componentType = type || 'address'
 
     setAbi(prev => {
       if (prev.length === 0) {
-        // Create new ABI function
+        // Create new ABI function with first parameter
         return [{
           type: 'function',
           name: functionName || 'newFunction',
           stateMutability: 'nonpayable',
-          inputs: [newInput],
+          inputs: [{
+            name: componentName,
+            type: componentType,
+            identifier: componentIdentifier
+          }],
           outputs: []
         }]
-      } else {
-        // Add to existing ABI
-        const newAbi = [...prev]
-        newAbi[0] = {
-          ...newAbi[0],
-          inputs: [...newAbi[0].inputs, newInput]
-        }
-        return newAbi
       }
-    })
 
-    setParameterOrder(prev => [...prev, identifier])
-    setDataArray(prev => {
-      const newMap = new Map(prev)
-      newMap.set(identifier, '')
-      return newMap
+      const newAbi = [...prev]
+
+      // If no target specified, add as top-level parameter
+      if (!target) {
+        // Check if the last parameter is already a default parameter (idempotent operation)
+        if (newAbi[0]?.inputs && newAbi[0].inputs.length > 0) {
+          const lastInput = newAbi[0].inputs[newAbi[0].inputs.length - 1]
+          if (lastInput.name === `param${newAbi[0].inputs.length - 1}` && lastInput.type === 'address') {
+            return prev // Skip if last parameter is already a default parameter (idempotent)
+          }
+        }
+
+        // Check if parameter with same name and type already exists (idempotent)
+        const existingParameter = newAbi[0].inputs.find(
+          (input: any) => input.name === componentName && input.type === componentType
+        )
+        if (existingParameter) {
+          return prev // Skip if parameter already exists (idempotent)
+        }
+
+        newAbi[0].inputs.push({
+          name: componentName,
+          type: componentType,
+          identifier: componentIdentifier
+        })
+
+        setParameterOrder(prev => [...prev, componentIdentifier])
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          newMap.set(componentIdentifier, '')
+          return newMap
+        })
+      } else {
+        // Add as tuple component
+        const isPath = typeof target === 'object' && target.path && Array.isArray(target.path)
+        const path = isPath ? target.path : [target as string]
+
+        if (path.length === 0) return prev // Skip if no path (idempotent)
+
+        const current = findComponentByPath(newAbi, path)
+        if (!current) return prev // Skip if component not found (idempotent)
+
+        // Ensure the target has components array
+        if (!current.components) {
+          current.components = []
+        }
+
+        // Check if we're trying to add a component that already exists (idempotent)
+        const existingComponent = current.components.find(
+          (comp: any) => comp.name === componentName && comp.type === componentType
+        )
+        if (existingComponent) {
+          return prev // Skip if component already exists (idempotent)
+        }
+
+        // Add the new component
+        current.components.push({
+          name: componentName,
+          type: componentType,
+          identifier: componentIdentifier
+        })
+      }
+
+      return newAbi
     })
   }, [abi, functionName, parameterOrder.length])
 
-  // Remove a parameter
-  const removeParameter = useCallback((identifier: string) => {
-    // Skip if identifier doesn't exist (idempotent operation)
-    if (!parameterOrder.includes(identifier)) {
-      return
-    }
+  // Remove component from ABI structure (unified for parameters and tuple components)
+  const removeComponent = useCallback((identifier: string | IdentifierPath) => {
+    // Handle both string identifier (top-level parameter) and IdentifierPath (nested component)
+    const path = typeof identifier === 'string' ? [identifier] : identifier.path
+    if (path.length === 0) return // Skip if no path (idempotent)
 
-    setAbi(prev => {
-      if (prev.length === 0) return prev
-      const newAbi = [...prev]
-      newAbi[0] = {
-        ...newAbi[0],
-        inputs: newAbi[0].inputs.filter((input: any) => input.identifier !== identifier)
-      }
-      return newAbi
-    })
-
-    setParameterOrder(prev => prev.filter(id => id !== identifier))
-    setDataArray(prev => {
-      const newMap = new Map(prev)
-      newMap.delete(identifier)
-      return newMap
-    })
-  }, [parameterOrder])
-
-  // Update parameter name
-  const updateParameterName = useCallback((identifier: string, newName: string) => {
-    setAbi(prev => {
-      if (prev.length === 0) return prev
-      const newAbi = [...prev]
-      newAbi[0] = {
-        ...newAbi[0],
-        inputs: newAbi[0].inputs.map((input: any) =>
-          input.identifier === identifier ? { ...input, name: newName } : input
-        )
-      }
-      return newAbi
-    })
-  }, [])
-
-  // Update parameter type
-  const updateParameterType = useCallback((identifier: string, newType: string) => {
-    // Update the ABI structure with the new type for the specified parameter
-    setAbi(prev => {
-      if (prev.length === 0) return prev
-      const newAbi = [...prev]
-      newAbi[0] = {
-        ...newAbi[0],
-        // Map through all inputs and update only the one with the specified identifier
-        inputs: newAbi[0].inputs.map((input: any) =>
-          input.identifier === identifier ? { ...input, type: newType } : input
-        )
-      }
-      return newAbi
-    })
-
-    // Reset data value when type changes to prevent type mismatches
-    // This ensures the data array stays in sync with the ABI structure
-    setDataArray(prev => {
-      const newMap = new Map(prev)
-      newMap.set(identifier, '') // Clear the value for the changed parameter
-      return newMap
-    })
-  }, [])
-
-  // Add tuple component to ABI structure (supports both top-level and nested tuples)
-  const addTupleComponent = useCallback((target: string | IdentifierPath, componentName: string, componentType: string) => {
-    const componentIdentifier = Date.now().toString()
-
-    setAbi(prev => {
-      if (prev.length === 0) return prev
-      const newAbi = [...prev]
-
-      // Determine if target is a parameter identifier (string) or a path (IdentifierPath)
-      const isPath = typeof target === 'object' && target.path && Array.isArray(target.path)
-      const path = isPath ? target.path : [target as string]
-
-      if (path.length === 0) return prev // Skip if no path (idempotent)
-
-      // Find parameter by first identifier
-      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path[0])
-      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
-
-      // Navigate to the target component
-      let current = newAbi[0].inputs[parameterIndex]
-
-      // For nested tuples, navigate through the remaining path
-      for (let i = 1; i < path.length; i++) {
-        const pathSegment = path[i]
-        if (current.components && Array.isArray(current.components)) {
-          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
-          if (componentIndex !== -1) {
-            current = current.components[componentIndex]
-          } else {
-            return prev // Skip if component not found (idempotent)
-          }
-        }
-      }
-
-      // Ensure the target has components array
-      if (!current.components) {
-        current.components = []
-      }
-
-      // Check if we're trying to add a component that already exists (idempotent)
-      const existingComponent = current.components.find(
-        (comp: any) => comp.name === componentName && comp.type === componentType
-      )
-      if (existingComponent) {
-        return prev // Skip if component already exists (idempotent)
-      }
-
-      // Add the new component
-      current.components.push({
-        name: componentName,
-        type: componentType,
-        identifier: componentIdentifier
-      })
-
-      return newAbi
-    })
-  }, [])
-
-  // Update tuple component type in ABI structure using path
-  const updateTupleComponentType = useCallback((path: IdentifierPath, newType: string) => {
-    setAbi(prev => {
-      if (prev.length === 0 || path.path.length === 0) return prev
-      const newAbi = [...prev]
-
-      // Find parameter by first identifier
-      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path.path[0])
-      if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
-
-      // Navigate to the component using the path
-      let current = newAbi[0].inputs[parameterIndex]
-
-      // Navigate through the remaining path to find the target component
-      for (let i = 1; i < path.path.length; i++) {
-        const pathSegment = path.path[i]
-        // Component identifier - find by identifier
-        if (current.components && Array.isArray(current.components)) {
-          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
-          if (componentIndex !== -1) {
-            current = current.components[componentIndex]
-          } else {
-            return prev // Skip if component not found (idempotent)
-          }
-        }
-      }
-
-      // Update the type
-      if (current && typeof current === 'object') {
-        current.type = newType
-      }
-
-      return newAbi
-    })
-  }, [])
-
-  // Remove tuple component from ABI structure using path
-  const removeTupleComponent = useCallback((path: IdentifierPath) => {
     // Track whether ABI removal was successful
     let abiRemovalSuccessful = false
     let componentName: string | null = null
 
     setAbi(prev => {
-      if (prev.length === 0 || path.path.length === 0) return prev
+      if (prev.length === 0) return prev
       const newAbi = [...prev]
 
       // Find parameter by first identifier
-      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path.path[0])
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path[0])
       if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
 
-      // Navigate to the component to get its name before removing
-      let current = newAbi[0].inputs[parameterIndex]
-      for (let i = 1; i < path.path.length; i++) {
-        const pathSegment = path.path[i]
-        if (current.components && Array.isArray(current.components)) {
-          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
-          if (componentIndex !== -1) {
-            current = current.components[componentIndex]
-            if (i === path.path.length - 1) {
-              componentName = current.name // This is the component to be removed
+      if (path.length === 1) {
+        // This is a top-level parameter removal
+        const targetIdentifier = path[0]
+
+        // Skip if identifier doesn't exist in parameter order (idempotent operation)
+        if (!parameterOrder.includes(targetIdentifier)) {
+          return prev
+        }
+
+        newAbi[0] = {
+          ...newAbi[0],
+          inputs: newAbi[0].inputs.filter((input: any) => input.identifier !== targetIdentifier)
+        }
+        abiRemovalSuccessful = true
+      } else {
+        // This is a tuple component removal
+        // Navigate to the component to get its name before removing
+        let current = newAbi[0].inputs[parameterIndex]
+        for (let i = 1; i < path.length; i++) {
+          const pathSegment = path[i]
+          if (current.components && Array.isArray(current.components)) {
+            const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+            if (componentIndex !== -1) {
+              current = current.components[componentIndex]
+              if (i === path.length - 1) {
+                componentName = current.name // This is the component to be removed
+              }
             }
           }
         }
-      }
 
-      // Navigate to the parent component
-      current = newAbi[0].inputs[parameterIndex]
-      for (let i = 1; i < path.path.length - 1; i++) {
-        const pathSegment = path.path[i]
-        if (current.components && Array.isArray(current.components)) {
-          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
-          if (componentIndex !== -1) {
-            current = current.components[componentIndex]
-          } else {
-            return prev // Skip if component not found (idempotent)
+        // Navigate to the parent component
+        current = newAbi[0].inputs[parameterIndex]
+        for (let i = 1; i < path.length - 1; i++) {
+          const pathSegment = path[i]
+          if (current.components && Array.isArray(current.components)) {
+            const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+            if (componentIndex !== -1) {
+              current = current.components[componentIndex]
+            } else {
+              return prev // Skip if component not found (idempotent)
+            }
           }
         }
-      }
 
-      // Remove the component at the final identifier (idempotent operation)
-      const finalIdentifier = path.path[path.path.length - 1]
-      if (current.components) {
-        const componentExists = current.components.some((comp: any) => comp.identifier === finalIdentifier)
-        if (componentExists) {
-          current.components = current.components.filter((comp: any) => comp.identifier !== finalIdentifier)
-          abiRemovalSuccessful = true // Mark ABI removal as successful
+        // Remove the component at the final identifier (idempotent operation)
+        const finalIdentifier = path[path.length - 1]
+        if (current.components) {
+          const componentExists = current.components.some((comp: any) => comp.identifier === finalIdentifier)
+          if (componentExists) {
+            current.components = current.components.filter((comp: any) => comp.identifier !== finalIdentifier)
+            abiRemovalSuccessful = true // Mark ABI removal as successful
+          }
         }
       }
 
       return newAbi
     })
 
-    // Only remove data if ABI removal was successful
-    if (abiRemovalSuccessful && componentName) {
+    // Handle data removal based on the type of component
+    if (abiRemovalSuccessful) {
+      if (path.length === 1) {
+        // Top-level parameter removal
+        const targetIdentifier = path[0]
+        setParameterOrder(prev => prev.filter(id => id !== targetIdentifier))
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(targetIdentifier)
+          return newMap
+        })
+      } else if (componentName) {
+        // Tuple component removal
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          const parameterIdentifier = path[0]
+          const parameterData = newMap.get(parameterIdentifier)
+
+          if (parameterData) {
+            // Check if this is an array (tuple[])
+            if (Array.isArray(parameterData)) {
+              // For tuple[] arrays, remove the component from all tuples
+              const newArray = parameterData.map((item: any) => {
+                if (item && typeof item === 'object' && item.value && typeof item.value === 'object') {
+                  const newValue = { ...item.value }
+                  delete newValue[componentName!]
+                  return { ...item, value: newValue }
+                }
+                return item
+              })
+              newMap.set(parameterIdentifier, newArray)
+            } else if (typeof parameterData === 'object') {
+              // For single tuples, remove the component by name
+              const newData = { ...parameterData }
+              delete newData[componentName!]
+              newMap.set(parameterIdentifier, newData)
+            }
+          }
+
+          return newMap
+        })
+      }
+    }
+  }, [parameterOrder])
+
+
+  // Update component properties in ABI structure (unified for parameters and tuple components)
+  const updateComponent = useCallback((identifier: string | IdentifierPath, updates: { name?: string; type?: string }) => {
+    setAbi(prev => {
+      if (prev.length === 0) return prev
+      const newAbi = [...prev]
+
+      // Handle both string identifier (top-level parameter) and IdentifierPath (nested component)
+      const path = typeof identifier === 'string' ? [identifier] : identifier.path
+      if (path.length === 0) return prev // Skip if no path (idempotent)
+
+      const current = findComponentByPath(newAbi, path)
+      if (!current) return prev // Skip if component not found (idempotent)
+
+      // Update the component properties
+      if (updates.name !== undefined) {
+        current.name = updates.name
+      }
+      if (updates.type !== undefined) {
+        current.type = updates.type
+      }
+
+      return newAbi
+    })
+
+    // Reset data value when type changes to prevent type mismatches
+    if (updates.type !== undefined) {
+      const targetIdentifier = typeof identifier === 'string' ? identifier : identifier.path[identifier.path.length - 1]
       setDataArray(prev => {
         const newMap = new Map(prev)
-        const parameterIdentifier = path.path[0]
-        const parameterData = newMap.get(parameterIdentifier)
-
-        if (parameterData) {
-          // Check if this is an array (tuple[])
-          if (Array.isArray(parameterData)) {
-            // For tuple[] arrays, remove the component from all tuples
-            const newArray = parameterData.map((item: any) => {
-              if (item && typeof item === 'object' && item.value && typeof item.value === 'object') {
-                const newValue = { ...item.value }
-                delete newValue[componentName!]
-                return { ...item, value: newValue }
-              }
-              return item
-            })
-            newMap.set(parameterIdentifier, newArray)
-          } else if (typeof parameterData === 'object') {
-            // For single tuples, remove the component by name
-            const newData = { ...parameterData }
-            delete newData[componentName!]
-            newMap.set(parameterIdentifier, newData)
-          }
-        }
-
+        newMap.set(targetIdentifier, '') // Clear the value for the changed component
         return newMap
       })
     }
-  }, [])
+  }, [findComponentByPath])
+
+
+
+
 
 
   // Load example ABI transaction
@@ -870,12 +858,12 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     dataValue={dataValue}
                     validation={validationState.parameters[validationKey]}
                     onUpdate={(newValue) => updateDataValue({ path: [identifier] }, newValue)}
-                    onRemove={() => removeParameter(identifier)}
-                    onUpdateName={(newName) => updateParameterName(identifier, newName)}
-                    onUpdateType={(newType) => updateParameterType(identifier, newType)}
-                    onAddTupleComponent={(target, componentName, componentType) => addTupleComponent(target, componentName, componentType)}
-                    onUpdateTupleComponentType={(path, newType) => updateTupleComponentType(path, newType)}
-                    onRemoveTupleComponent={(path) => removeTupleComponent(path)}
+                    onRemove={() => removeComponent(identifier)}
+                    onUpdateName={(newName) => updateComponent(identifier, { name: newName })}
+                    onUpdateType={(newType) => updateComponent(identifier, { type: newType })}
+                    onAddComponent={(target, componentName, componentType) => addComponent(target, componentName, componentType)}
+                    onUpdateComponent={(path, updates) => updateComponent(path, updates)}
+                    onRemoveComponent={(path) => removeComponent(path)}
                     annotation={index.toString()}
                     currentPath={{ path: [identifier] }}
                   />
@@ -884,7 +872,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             })}
 
             <Button
-              onClick={addParameter}
+              onClick={() => addComponent()}
               variant="outline"
               className="w-full"
             >
