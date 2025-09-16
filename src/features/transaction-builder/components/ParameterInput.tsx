@@ -307,13 +307,19 @@ const ParameterInput = React.memo(function ParameterInput({
 
         {/* Parameter Name */}
         <div className="md:col-span-2">
-          <input
-            type="text"
-            value={abiInput.name}
-            onChange={(e) => onUpdateName?.(e.target.value)}
-            placeholder="Parameter name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-transparent focus:ring-blue-500 text-sm"
-          />
+          {onUpdateName ? (
+            <input
+              type="text"
+              value={abiInput.name}
+              onChange={(e) => onUpdateName(e.target.value)}
+              placeholder="Parameter name"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:border-transparent focus:ring-blue-500 text-sm"
+            />
+          ) : (
+            <div className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
+              {abiInput.name || 'Unnamed'}
+            </div>
+          )}
         </div>
 
         {/* Parameter Type */}
@@ -499,10 +505,10 @@ const ParameterInput = React.memo(function ParameterInput({
         <div className="mt-4 space-y-2">
           {abiInput.components.map((component, index) => {
             const componentValue = dataValue[component.name]
-            const componentIdentifier = component.identifier || Date.now().toString() + index
+            const componentIdentifier = component.identifier || `component-${index}`
 
             return (
-              <div key={`${component.name || 'unnamed'}-${componentIdentifier}`} className="ml-2 border-l-2 border-gray-200 pl-2">
+              <div key={componentIdentifier} className="ml-2 border-l-2 border-gray-200 pl-2">
                 <ParameterInput
                   abiInput={component}
                   dataValue={componentValue}
