@@ -832,12 +832,11 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
           <div className="space-y-4">
             {/* Column headers - only show when there are parameters */}
             {abi[0]?.inputs && abi[0].inputs.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
-                <div className="text-sm font-medium text-gray-700 text-center md:col-span-1">#</div>
+              <div className="grid grid-cols-1 md:grid-cols-11 gap-4 px-4">
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-3">Type</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-5">Value</div>
-                <div className="text-sm font-medium text-gray-700 text-center">Delete</div>
+                <div className="text-sm font-medium text-gray-700 text-center md:col-span-1">Delete</div>
               </div>
             )}
 
@@ -864,7 +863,6 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     onAddComponent={(target, componentName, componentType) => addComponent(target, componentName, componentType)}
                     onUpdateComponent={(path, updates) => updateComponent(path, updates)}
                     onRemoveComponent={(path) => removeComponent(path)}
-                    annotation={index.toString()}
                     currentPath={{ path: [identifier] }}
                   />
                 </div>

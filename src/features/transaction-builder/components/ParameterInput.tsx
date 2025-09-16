@@ -31,7 +31,6 @@ interface ParameterInputProps {
   onAddComponent?: (target: string | IdentifierPath, componentName: string, componentType: string) => void
   onUpdateComponent?: (path: IdentifierPath, updates: { name?: string; type?: string }) => void
   onRemoveComponent?: (path: IdentifierPath) => void
-  annotation?: string
   disabled?: boolean
   arrayParent?: ArrayParent | null
   currentPath?: IdentifierPath // The full path to this component
@@ -50,14 +49,6 @@ const getRecentValues = (type: string): string[] => {
   return JSON.parse(localStorage.getItem(key) || '[]')
 }
 
-// Helper functions to generate annotations
-const generateArrayAnnotation = (parentAnnotation: string, index: number): string => {
-  if (parentAnnotation.endsWith(']')) {
-    return `${parentAnnotation}${index}`
-  } else {
-    return `[${index}]`
-  }
-}
 
 
 const ParameterInput = React.memo(function ParameterInput({
@@ -71,7 +62,6 @@ const ParameterInput = React.memo(function ParameterInput({
   onAddComponent,
   onUpdateComponent,
   onRemoveComponent,
-  annotation = "1",
   disabled = false,
   arrayParent = null,
   currentPath = { path: [] }
@@ -297,14 +287,7 @@ const ParameterInput = React.memo(function ParameterInput({
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-        {/* Annotation Column - Narrow */}
-        <div className="md:col-span-1">
-          <div className="text-xs text-gray-500 font-mono text-center">
-            {annotation}
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-11 gap-4 items-end">
         {/* Parameter Name */}
         <div className="md:col-span-2">
           {onUpdateName ? (
@@ -476,7 +459,6 @@ const ParameterInput = React.memo(function ParameterInput({
               identifier: item.identifier
             }
 
-            const elementAnnotation = generateArrayAnnotation(annotation, index + 1)
 
             return (
               <div key={item.identifier || index} className="ml-2 border-l-2 border-gray-200 pl-2">
@@ -489,7 +471,6 @@ const ParameterInput = React.memo(function ParameterInput({
                   onAddComponent={onAddComponent}
                   onUpdateComponent={onUpdateComponent}
                   onRemoveComponent={onRemoveComponent}
-                  annotation={elementAnnotation}
                   disabled={elementType !== 'tuple'}
                   arrayParent={arrayParent ? { ...arrayParent } : { path: currentPath.path }}
                   currentPath={{ path: [currentPath.path[0]] }}
@@ -532,7 +513,6 @@ const ParameterInput = React.memo(function ParameterInput({
                   }}
                   onAddComponent={onAddComponent}
                   onRemoveComponent={onRemoveComponent}
-                  annotation={""}
                   disabled={false}
                   arrayParent={arrayParent ? { ...arrayParent, path: [...arrayParent.path, componentIdentifier] } : null}
                   currentPath={{ path: [...currentPath.path, componentIdentifier] }}
