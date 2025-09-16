@@ -6,7 +6,6 @@ import TypeSelector from '../../../components/ui/TypeSelector'
 import {
   getDefaultValueForType,
   convertStringToType,
-  safeStringify,
   valueToString,
   getPlaceholderForType,
   getTypeHint,
@@ -75,6 +74,12 @@ const ParameterInput = React.memo(function ParameterInput({
 
   // Get recent values for current parameter type
   const recentValues = getRecentValues(abiInput.type)
+
+  // Helper function to generate array element name based on path
+  const generateArrayElementName = (parentName: string, currentPath: IdentifierPath, index: number): string => {
+    // For all arrays, just use simple indexing: parentName[index]
+    return `${parentName}[${index}]`
+  }
 
   // Filter suggestions based on current input
   const filterSuggestions = (input: string, suggestions: string[]) => {
@@ -378,8 +383,9 @@ const ParameterInput = React.memo(function ParameterInput({
         <div className="mt-4 space-y-2">
           {dataValue.map((item, index) => {
             const elementType = abiInput.type.slice(0, -2)
+            const elementName = generateArrayElementName(abiInput.name, currentPath, index)
             const elementAbiInput: AbiInput = {
-              name: `element_${index}`,
+              name: elementName,
               type: elementType,
               components: abiInput.components,
               identifier: item.identifier

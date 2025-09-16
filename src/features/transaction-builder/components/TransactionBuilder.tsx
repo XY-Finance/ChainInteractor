@@ -432,6 +432,17 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
   // Update component properties in ABI structure (unified for parameters and tuple components)
   const updateComponent = useCallback((identifier: string | IdentifierPath, updates: { name?: string; type?: string }) => {
+    let oldName: string | undefined
+
+    // Get the old name before updating ABI for data migration
+    if (updates.name !== undefined && typeof identifier !== 'string') {
+      const path = identifier.path
+      if (path.length > 1) { // This is a nested component (tuple component)
+        const current = findComponentByPath(abi, path)
+        oldName = current?.name
+      }
+    }
+
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
@@ -454,6 +465,27 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       return newAbi
     })
 
+    // Handle data migration for tuple component name changes
+    if (updates.name !== undefined && oldName && oldName !== updates.name && typeof identifier !== 'string') {
+      const path = identifier.path
+      if (path.length > 1) { // This is a nested component (tuple component)
+        const parentIdentifier = path[0] // Root parameter identifier
+        setDataArray(prev => {
+          const newMap = new Map(prev)
+          const parentData = newMap.get(parentIdentifier)
+
+          if (parentData && typeof parentData === 'object' && oldName in parentData && updates.name) {
+            const newParentData = { ...parentData }
+            newParentData[updates.name] = newParentData[oldName]
+            delete newParentData[oldName]
+            newMap.set(parentIdentifier, newParentData)
+          }
+
+          return newMap
+        })
+      }
+    }
+
     // Reset data value when type changes to prevent type mismatches
     if (updates.type !== undefined) {
       const targetIdentifier = typeof identifier === 'string' ? identifier : identifier.path[identifier.path.length - 1]
@@ -463,7 +495,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         return newMap
       })
     }
-  }, [findComponentByPath])
+  }, [findComponentByPath, abi])
 
 
 
@@ -756,7 +788,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
               const validationKey = `param-${identifier || index}`
 
               return (
-                <div key={`${input.name}-${identifier}`} className={`border rounded-lg p-4 ${
+                <div key={identifier} className={`border rounded-lg p-4 ${
                   validationState.parameters[validationKey] && !validationState.parameters[validationKey].isValid && dataValue
                     ? 'border-red-300 bg-red-50'
                     : 'border-gray-200 bg-gray-50'
