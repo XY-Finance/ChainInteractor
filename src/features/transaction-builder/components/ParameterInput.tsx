@@ -52,25 +52,13 @@ const getRecentValues = (type: string): string[] => {
 
 // Helper functions to generate annotations
 const generateArrayAnnotation = (parentAnnotation: string, index: number): string => {
-  if (parentAnnotation === "1") {
-    return `[${index}]`
+  if (parentAnnotation.endsWith(']')) {
+    return `${parentAnnotation}${index}`
   } else {
-    return `${parentAnnotation}[${index}]`
+    return `[${index}]`
   }
 }
 
-const generateTupleAnnotation = (parentAnnotation: string, index: number, isLast: boolean): string => {
-  if (parentAnnotation === "1") {
-    return "+-·"
-  } else {
-    const shouldSlice = parentAnnotation.endsWith('·');
-    const parentLines = (shouldSlice ? parentAnnotation.slice(0, -1) : parentAnnotation)
-      .replace(/\+/g, '|')
-      .replace(/-/g, ' ');
-    const connector = "+-·"
-    return parentLines + connector
-  }
-}
 
 const ParameterInput = React.memo(function ParameterInput({
   abiInput,
@@ -310,9 +298,9 @@ const ParameterInput = React.memo(function ParameterInput({
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-        {/* Annotation Column */}
+        {/* Annotation Column - Narrow */}
         <div className="md:col-span-1">
-          <div className="text-xs text-gray-500 font-mono text-left">
+          <div className="text-xs text-gray-500 font-mono text-center">
             {annotation}
           </div>
         </div>
@@ -329,7 +317,7 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
 
         {/* Parameter Type */}
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <TypeSelector
             value={abiInput.type}
               onChange={(newType) => {
@@ -355,7 +343,7 @@ const ParameterInput = React.memo(function ParameterInput({
         </div>
 
         {/* Parameter Value */}
-        <div className="relative md:col-span-6">
+        <div className="relative md:col-span-5">
           {abiInput.type === 'bool' ? (
             <div className="flex items-center justify-center h-10">
               <button
@@ -510,8 +498,6 @@ const ParameterInput = React.memo(function ParameterInput({
       {abiInput.type === 'tuple' && abiInput.components && typeof dataValue === 'object' && dataValue !== null && (
         <div className="mt-4 space-y-2">
           {abiInput.components.map((component, index) => {
-            const isLast = index === abiInput.components!.length - 1
-            const componentAnnotation = generateTupleAnnotation(annotation, index + 1, isLast)
             const componentValue = dataValue[component.name]
             const componentIdentifier = component.identifier || Date.now().toString() + index
 
@@ -536,7 +522,7 @@ const ParameterInput = React.memo(function ParameterInput({
                   }}
                   onAddTupleComponent={onAddTupleComponent}
                   onRemoveTupleComponent={onRemoveTupleComponent}
-                  annotation={componentAnnotation}
+                  annotation={""}
                   disabled={false}
                   arrayParent={arrayParent ? { ...arrayParent, path: [...arrayParent.path, componentIdentifier] } : null}
                   currentPath={{ path: [...currentPath.path, componentIdentifier] }}

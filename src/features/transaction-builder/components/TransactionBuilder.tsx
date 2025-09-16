@@ -845,10 +845,10 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
             {/* Column headers - only show when there are parameters */}
             {abi[0]?.inputs && abi[0].inputs.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4">
-                <div className="text-sm font-medium text-gray-700 text-center">Annotation</div>
+                <div className="text-sm font-medium text-gray-700 text-center md:col-span-1">#</div>
                 <div className="text-sm font-medium text-gray-700 md:col-span-2">Name</div>
-                <div className="text-sm font-medium text-gray-700 md:col-span-2">Type</div>
-                <div className="text-sm font-medium text-gray-700 md:col-span-6">Value</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-3">Type</div>
+                <div className="text-sm font-medium text-gray-700 md:col-span-5">Value</div>
                 <div className="text-sm font-medium text-gray-700 text-center">Delete</div>
               </div>
             )}
@@ -876,7 +876,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     onAddTupleComponent={(target, componentName, componentType) => addTupleComponent(target, componentName, componentType)}
                     onUpdateTupleComponentType={(path, newType) => updateTupleComponentType(path, newType)}
                     onRemoveTupleComponent={(path) => removeTupleComponent(path)}
-                    annotation="1"
+                    annotation={index.toString()}
                     currentPath={{ path: [identifier] }}
                   />
                 </div>
