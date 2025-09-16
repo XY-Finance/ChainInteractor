@@ -388,34 +388,60 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     })
   }, [])
 
-  // Add tuple component to ABI structure
-  const addTupleComponent = useCallback((parameterIdentifier: string, componentName: string, componentType: string) => {
+  // Add tuple component to ABI structure (supports both top-level and nested tuples)
+  const addTupleComponent = useCallback((target: string | IdentifierPath, componentName: string, componentType: string) => {
     const componentIdentifier = Date.now().toString()
 
     setAbi(prev => {
       if (prev.length === 0) return prev
       const newAbi = [...prev]
-      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === parameterIdentifier)
 
+      // Determine if target is a parameter identifier (string) or a path (IdentifierPath)
+      const isPath = typeof target === 'object' && target.path && Array.isArray(target.path)
+      const path = isPath ? target.path : [target as string]
+
+      if (path.length === 0) return prev // Skip if no path (idempotent)
+
+      // Find parameter by first identifier
+      const parameterIndex = newAbi[0].inputs.findIndex((input: any) => input.identifier === path[0])
       if (parameterIndex === -1) return prev // Skip if parameter not found (idempotent)
 
-      if (!newAbi[0].inputs[parameterIndex].components) {
-        newAbi[0].inputs[parameterIndex].components = []
+      // Navigate to the target component
+      let current = newAbi[0].inputs[parameterIndex]
+
+      // For nested tuples, navigate through the remaining path
+      for (let i = 1; i < path.length; i++) {
+        const pathSegment = path[i]
+        if (current.components && Array.isArray(current.components)) {
+          const componentIndex = current.components.findIndex((comp: any) => comp.identifier === pathSegment)
+          if (componentIndex !== -1) {
+            current = current.components[componentIndex]
+          } else {
+            return prev // Skip if component not found (idempotent)
+          }
+        }
+      }
+
+      // Ensure the target has components array
+      if (!current.components) {
+        current.components = []
       }
 
       // Check if we're trying to add a component that already exists (idempotent)
-      const existingComponent = newAbi[0].inputs[parameterIndex].components.find(
+      const existingComponent = current.components.find(
         (comp: any) => comp.name === componentName && comp.type === componentType
       )
       if (existingComponent) {
         return prev // Skip if component already exists (idempotent)
       }
 
-      newAbi[0].inputs[parameterIndex].components.push({
+      // Add the new component
+      current.components.push({
         name: componentName,
         type: componentType,
         identifier: componentIdentifier
       })
+
       return newAbi
     })
   }, [])
@@ -805,7 +831,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
                     onRemove={() => removeParameter(identifier)}
                     onUpdateName={(newName) => updateParameterName(identifier, newName)}
                     onUpdateType={(newType) => updateParameterType(identifier, newType)}
-                    onAddTupleComponent={(componentName, componentType) => addTupleComponent(identifier, componentName, componentType)}
+                    onAddTupleComponent={(target, componentName, componentType) => addTupleComponent(target, componentName, componentType)}
                     onUpdateTupleComponentType={(path, newType) => updateTupleComponentType(path, newType)}
                     onRemoveTupleComponent={(path) => removeTupleComponent(path)}
                     annotation="1"
