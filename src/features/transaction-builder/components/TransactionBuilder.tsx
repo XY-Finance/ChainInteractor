@@ -6,7 +6,7 @@ import { Button } from '../../../components/ui/Button'
 import { AddressSelector } from '../../../components/ui'
 import { useWalletManager } from '../../../hooks/useWalletManager'
 import { encodeFunctionData, isAddress } from 'viem'
-import { getDefaultValueForType } from '../../../utils/typeUtils'
+import { getDefaultValueForType, validateFunctionName, validateAddress, validateDataValue } from '../../../utils/typeUtils'
 import ParameterInput from './ParameterInput'
 import ExampleTransactions from './ExampleTransactions'
 
@@ -21,97 +21,6 @@ interface ValidationState {
   functionName: { isValid: boolean; message: string }
   targetAddress: { isValid: boolean; message: string }
   parameters: { [id: string]: { isValid: boolean; message: string } }
-}
-
-
-// Validation functions
-const validateFunctionName = (name: string): { isValid: boolean; message: string } => {
-  if (!name.trim()) {
-    return { isValid: false, message: 'Function name is required' }
-  }
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    return { isValid: false, message: 'Invalid function name format' }
-  }
-  return { isValid: true, message: '' }
-}
-
-const validateAddress = (address: string): { isValid: boolean; message: string } => {
-  if (!address.trim()) {
-    return { isValid: false, message: 'Contract address is required' }
-  }
-  if (!isAddress(address)) {
-    return { isValid: false, message: 'Invalid Ethereum address format' }
-  }
-  return { isValid: true, message: '' }
-}
-
-const validateDataValue = (input: any, value: any): { isValid: boolean; message: string } => {
-  if (value === undefined || value === null || value === '') {
-    return { isValid: false, message: 'Value is required' }
-  }
-
-  const stringValue = String(value).trim()
-
-  switch (input.type) {
-    case 'address':
-      if (!isAddress(stringValue)) {
-        return { isValid: false, message: 'Invalid address format' }
-      }
-      break
-    case 'uint256':
-    case 'uint128':
-    case 'uint64':
-    case 'uint32':
-    case 'uint16':
-    case 'uint8':
-      if (!/^\d+$/.test(stringValue) || BigInt(stringValue) < 0n) {
-        return { isValid: false, message: 'Must be a positive integer' }
-      }
-      break
-    case 'int256':
-    case 'int128':
-    case 'int64':
-    case 'int32':
-    case 'int16':
-    case 'int8':
-      if (!/^-?\d+$/.test(stringValue)) {
-        return { isValid: false, message: 'Must be an integer' }
-      }
-      break
-    case 'bool':
-      if (!['true', 'false'].includes(stringValue.toLowerCase())) {
-        return { isValid: false, message: 'Must be "true" or "false"' }
-      }
-      break
-    case 'bytes':
-    case 'bytes32':
-    case 'bytes16':
-    case 'bytes8':
-    case 'bytes4':
-    case 'bytes2':
-    case 'bytes1':
-      if (!/^0x[0-9a-fA-F]*$/.test(stringValue)) {
-        return { isValid: false, message: 'Must be hex format (0x...)' }
-      }
-      break
-    case 'string':
-      if (!stringValue) {
-        return { isValid: false, message: 'String value is required' }
-      }
-      break
-    default:
-      if (input.type.endsWith('[]') || input.type === 'tuple') {
-        // For arrays and tuples, just check if value exists
-        if (!value) {
-          return { isValid: false, message: 'Value is required' }
-        }
-      } else if (!stringValue) {
-        return { isValid: false, message: 'Value is required' }
-      }
-      break
-  }
-
-  return { isValid: true, message: '' }
 }
 
 
@@ -150,7 +59,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
   // Validation state
   const validationState = useMemo((): ValidationState => {
     const functionNameValidation = validateFunctionName(functionName)
-    const targetAddressValidation = validateAddress(targetAddress)
+    const targetAddressValidation = validateAddress(targetAddress, isAddress)
 
     // Validate parameters
     const parametersValidation: { [id: string]: { isValid: boolean; message: string } } = {}
@@ -159,7 +68,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
       abi[0].inputs.forEach((input: any, index: number) => {
         const identifier = parameterOrder[index]
         const value = identifier ? dataArray.get(identifier) : undefined
-        parametersValidation[`param-${identifier || index}`] = validateDataValue(input, value)
+        parametersValidation[`param-${identifier || index}`] = validateDataValue(input, value, isAddress)
       })
     }
 

@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
+import { getRecentAddresses } from '../../utils/typeUtils'
 import { matchesSearchTerm, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
@@ -12,11 +13,6 @@ interface AddressBookProps {
   className?: string
 }
 
-// localStorage utilities for recent addresses
-const getRecentAddresses = (): string[] => {
-  const key = 'recent_addresses'
-  return JSON.parse(localStorage.getItem(key) || '[]')
-}
 
 export default function AddressBook({ className = '' }: AddressBookProps) {
   const [isExpanded, setIsExpanded] = useState(false)
@@ -122,7 +118,7 @@ export default function AddressBook({ className = '' }: AddressBookProps) {
   }).filter(cat => cat.count > 0)
 
   // Get recent addresses that aren't in config
-  const recentAddresses = getRecentAddresses().filter(addr =>
+  const recentAddresses = getRecentAddresses(isAddress).filter(addr =>
     !allConfigAddresses.has(addr.toLowerCase())
   )
 

@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { addresses } from '../../config/addresses'
 import { isAddress } from 'viem'
+import { saveRecentAddress, getRecentAddresses } from '../../utils/typeUtils'
 import { matchesSearchTerm, getSearchScore, searchWithHighlights, type AddressItem } from '../../utils/addressSearch'
 import { useKeyboardNavigation } from '../../hooks/useKeyboardNavigation'
 import HighlightedText from './HighlightedText'
@@ -17,32 +18,9 @@ interface AddressSelectorProps {
   defaultValue?: string
 }
 
-// localStorage utilities for recent addresses
-const saveRecentAddress = (address: string) => {
-  // Only save valid Ethereum addresses to localStorage
-  if (!isAddress(address)) {
-    console.warn('Attempted to save invalid address to localStorage:', address)
-    return
-  }
-
-  const key = 'recent_addresses'
-  const recent = JSON.parse(localStorage.getItem(key) || '[]')
-  const updated = [address, ...recent.filter((v: string) => v !== address)].slice(0, 5)
-  localStorage.setItem(key, JSON.stringify(updated))
-}
-
-const getRecentAddresses = (): string[] => {
-  const key = 'recent_addresses'
-  const addresses = JSON.parse(localStorage.getItem(key) || '[]')
-  // Filter out any invalid addresses that might exist in localStorage
-  const validAddresses = addresses.filter((addr: string) => isAddress(addr))
-
-  // If we filtered out invalid addresses, update localStorage
-  if (validAddresses.length !== addresses.length) {
-    localStorage.setItem(key, JSON.stringify(validAddresses))
-  }
-
-  return validAddresses
+// Get recent addresses using the utility function
+const getRecentAddressesList = (): string[] => {
+  return getRecentAddresses(isAddress)
 }
 
 export default function AddressSelector({
@@ -106,7 +84,7 @@ export default function AddressSelector({
   }).filter(cat => cat.count > 0)
 
   // Get recent addresses that aren't in config
-  const recentAddresses = getRecentAddresses().filter(addr =>
+  const recentAddresses = getRecentAddressesList().filter(addr =>
     !allConfigAddresses.has(addr.toLowerCase())
   )
 
@@ -150,7 +128,7 @@ export default function AddressSelector({
 
   const handleSelect = useCallback((address: string) => {
     onChange(address)
-    saveRecentAddress(address)
+    saveRecentAddress(address, isAddress)
     setIsOpen(false)
     setSearchTerm('')
     setSelectedIndex(-1)

@@ -3,7 +3,16 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { AddressSelector } from '../../../components/ui'
 import TypeSelector from '../../../components/ui/TypeSelector'
-import { getDefaultValueForType } from '../../../utils/typeUtils'
+import {
+  getDefaultValueForType,
+  convertStringToType,
+  safeStringify,
+  valueToString,
+  getPlaceholderForType,
+  getTypeHint,
+  saveRecentValue,
+  getRecentValues
+} from '../../../utils/typeUtils'
 
 interface AbiInput {
   name: string
@@ -36,18 +45,6 @@ interface ParameterInputProps {
   currentPath?: IdentifierPath // The full path to this component
 }
 
-// localStorage utilities for recent values
-const saveRecentValue = (type: string, value: string) => {
-  const key = `recent_${type}`
-  const recent = JSON.parse(localStorage.getItem(key) || '[]')
-  const updated = [value, ...recent.filter((v: string) => v !== value)].slice(0, 20)
-  localStorage.setItem(key, JSON.stringify(updated))
-}
-
-const getRecentValues = (type: string): string[] => {
-  const key = `recent_${type}`
-  return JSON.parse(localStorage.getItem(key) || '[]')
-}
 
 
 
@@ -106,77 +103,6 @@ const ParameterInput = React.memo(function ParameterInput({
     valueInputRef.current?.blur()
   }
 
-  // Convert string input to appropriate type
-  const convertStringToType = (value: string, type: string): any => {
-    const trimmedValue = value.trim()
-
-    if (!trimmedValue) {
-      return getDefaultValueForType(type)
-    }
-
-    switch (type) {
-      case 'address':
-        return trimmedValue
-      case 'uint256':
-      case 'uint128':
-      case 'uint64':
-      case 'uint32':
-      case 'uint16':
-      case 'uint8':
-        return BigInt(trimmedValue)
-      case 'int256':
-      case 'int128':
-      case 'int64':
-      case 'int32':
-      case 'int16':
-      case 'int8':
-        return BigInt(trimmedValue)
-      case 'bool':
-        return trimmedValue === 'true'
-      case 'string':
-      case 'bytes':
-      case 'bytes32':
-      case 'bytes16':
-      case 'bytes8':
-      case 'bytes4':
-      case 'bytes2':
-      case 'bytes1':
-        return trimmedValue
-      default:
-        return trimmedValue
-    }
-  }
-
-
-  // Custom JSON stringify that handles BigInt
-  const safeStringify = (value: any): string => {
-    return JSON.stringify(value, (key, val) => {
-      return typeof val === 'bigint' ? val.toString() : val
-    })
-  }
-
-  // Convert value to string for display
-  const valueToString = (value: any): string => {
-    if (value === undefined || value === null) return ''
-
-    if (typeof value === 'boolean') {
-      return value ? 'true' : 'false'
-    }
-
-    if (typeof value === 'bigint') {
-      return value.toString()
-    }
-
-    if (Array.isArray(value)) {
-      return safeStringify(value)
-    }
-
-    if (typeof value === 'object') {
-      return safeStringify(value)
-    }
-
-    return String(value)
-  }
 
   // Save recent values when parameter is valid
   useEffect(() => {
@@ -526,86 +452,6 @@ const ParameterInput = React.memo(function ParameterInput({
   )
 })
 
-// Helper function to get placeholder text based on type
-function getPlaceholderForType(type: string): string {
-  switch (type) {
-    case 'address':
-      return '0x...'
-    case 'uint256':
-    case 'uint128':
-    case 'uint64':
-    case 'uint32':
-    case 'uint16':
-    case 'uint8':
-    case 'int256':
-    case 'int128':
-    case 'int64':
-    case 'int32':
-    case 'int16':
-    case 'int8':
-      return '123'
-    case 'bool':
-      return 'true or false'
-    case 'string':
-      return 'Hello World'
-    case 'bytes':
-    case 'bytes32':
-    case 'bytes16':
-    case 'bytes8':
-    case 'bytes4':
-    case 'bytes2':
-    case 'bytes1':
-      return '0x...'
-    case 'tuple':
-      return 'Add components below'
-    default:
-      if (type.endsWith('[]')) {
-        return 'Add elements below'
-      }
-      return 'Enter value'
-  }
-}
-
-// Helper function to get type-specific hints
-function getTypeHint(type: string): string {
-  switch (type) {
-    case 'address':
-      return 'Enter a valid Ethereum address (0x followed by 40 hex characters)'
-    case 'uint256':
-    case 'uint128':
-    case 'uint64':
-    case 'uint32':
-    case 'uint16':
-    case 'uint8':
-      return 'Enter a positive integer'
-    case 'int256':
-    case 'int128':
-    case 'int64':
-    case 'int32':
-    case 'int16':
-    case 'int8':
-      return 'Enter an integer (positive or negative)'
-    case 'bool':
-      return 'Enter "true" or "false"'
-    case 'string':
-      return 'Enter any text string'
-    case 'bytes':
-    case 'bytes32':
-    case 'bytes16':
-    case 'bytes8':
-    case 'bytes4':
-    case 'bytes2':
-    case 'bytes1':
-      return 'Enter hex data (0x followed by hex characters)'
-    case 'tuple':
-      return 'Add components to define the tuple structure'
-    default:
-      if (type.endsWith('[]')) {
-        return 'Add elements to define the array structure'
-      }
-      return ''
-  }
-}
 
 export default ParameterInput
 
