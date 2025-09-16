@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 
 interface NetworkInfo {
@@ -25,8 +25,8 @@ export default function NetworkSelector() {
   const [isSwitching, setIsSwitching] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
 
-  // Update current network when wallet connects or network changes
-  useEffect(() => {
+  // Memoized network update function to prevent recreation
+  const updateNetworkState = useCallback(() => {
     if (isConnected) {
       const network = getCurrentNetwork()
       if (network) {
@@ -41,24 +41,34 @@ export default function NetworkSelector() {
         })
         setSupportedNetworks(supportedNetworksList)
       }
-
-      // Set up network change callback
-      setNetworkChangeCallback((network) => {
-        const supportedNetworksList = getSupportedNetworks()
-        const currentNetworkInfo = supportedNetworksList.find(n => n.chainId === network.chainId)
-        setCurrentNetwork(currentNetworkInfo || {
-          chainId: network.chainId,
-          name: network.name,
-          isSupported: network.isSupported,
-          isDefault: false,
-          chain: null
-        })
-      })
     } else {
       setCurrentNetwork(null)
       setSupportedNetworks([])
     }
-  }, [isConnected, getCurrentNetwork, getSupportedNetworks, setNetworkChangeCallback])
+  }, [isConnected, getCurrentNetwork, getSupportedNetworks])
+
+  // Memoized network change callback to prevent recreation
+  const networkChangeHandler = useCallback((network: { chainId: number; name: string; isSupported: boolean }) => {
+    const supportedNetworksList = getSupportedNetworks()
+    const currentNetworkInfo = supportedNetworksList.find(n => n.chainId === network.chainId)
+    setCurrentNetwork(currentNetworkInfo || {
+      chainId: network.chainId,
+      name: network.name,
+      isSupported: network.isSupported,
+      isDefault: false,
+      chain: null
+    })
+  }, [getSupportedNetworks])
+
+  // Update current network when wallet connects or network changes
+  useEffect(() => {
+    updateNetworkState()
+
+    if (isConnected) {
+      // Set up network change callback
+      setNetworkChangeCallback(networkChangeHandler)
+    }
+  }, [isConnected, updateNetworkState, setNetworkChangeCallback, networkChangeHandler])
 
   const handleNetworkSwitch = async (chainId: number) => {
     if (!isConnected) return

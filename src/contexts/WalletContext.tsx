@@ -1,8 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { WalletManager } from '../lib/wallets/wallet-manager'
 import { type WalletType, type WalletAccount, type WalletConfig } from '../types/wallet'
+import { PageSkeleton } from '../components/ui/PageSkeleton'
 
 interface WalletContextType {
   // State
@@ -12,28 +13,42 @@ interface WalletContextType {
   error: string | null
   availableWallets: WalletConfig[]
   capabilities: any
+  currentDelegation: string | null
+  currentNonce: number | null
+  address: string | null
+  publicClient: any
+  walletClient: any
+  isAutoConnecting: boolean
+  isRenewingAccount: boolean
 
   // Actions
   connectWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
   disconnectWallet: () => Promise<void>
   switchWallet: (type: WalletType, keyIndex?: number) => Promise<WalletAccount>
-  signMessage: (message: string) => Promise<any>
-  signTypedData: (domain: any, types: any, message: any) => Promise<any>
-  sendTransaction: (transaction: any) => Promise<any>
+  autoConnectToKey0: () => Promise<WalletAccount | null>
+  signMessage: (message: string) => Promise<string>
+  signTypedData: (domain: any, types: any, message: any) => Promise<string>
+  signPermit: (amount: bigint) => Promise<any>
+  sendTransaction: (transaction: any) => Promise<string>
   sign7702Authorization: (authorizationData: any) => Promise<any>
   submit7702Authorization: (signedAuthorization: any) => Promise<any>
-  getAvailableDelegatees: (currentDelegations: string, options: any[]) => any[]
-  isDelegateeSupported: (delegateeAddress: string) => boolean
-  getDelegateeOptions: (currentDelegations: string, options: any[]) => any[]
-  getDelegateeSupportInfo: (delegateeAddress: string) => { isSupported: boolean; reason?: string }
-  getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => Array<any & { isSupported: boolean; reason?: string }>
-
-  createSmartAccount: () => Promise<any>
-  sendUserOperation: (userOp: any) => Promise<any>
-  getAvailableKeys: () => Promise<any>
+  createSmartAccount: () => Promise<string>
+  sendUserOperation: (userOp: any) => Promise<string>
+  getAvailableKeys: () => Promise<Array<{index: number, address: string}>>
+  areLocalKeysAvailable: () => Promise<boolean>
+  getAvailableInjectedAccounts: () => Promise<Array<{index: number, address: string}>>
+  getAllAvailableAccounts: () => Promise<{
+    localKeys: Array<{index: number, address: string}>,
+    injectedAccounts: Array<{index: number, address: string}>
+  }>
   getPublicClient: () => any
   getWalletClient: () => any
   clearError: () => void
+  checkCurrentDelegation: () => Promise<void>
+  filterCurrentDelegatee: (currentDelegations: string, options: any[]) => any[]
+  isDelegateeSupported: (delegateeAddress: string) => boolean
+  getDelegateeSupportInfo: (delegateeAddress: string) => { isSupported: boolean; reason?: string }
+  getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => Array<any & { isSupported: boolean; reason?: string }>
 
   // Network detection
   getCurrentChainId: () => Promise<number | null>
@@ -60,53 +75,146 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [availableWallets, setAvailableWallets] = useState<WalletConfig[]>([])
+  const [currentDelegation, setCurrentDelegation] = useState<string | null>(null)
+  const [currentNonce, setCurrentNonce] = useState<number | null>(null)
+  const [isAutoConnecting, setIsAutoConnecting] = useState(false)
+  const [isRenewingAccount, setIsRenewingAccount] = useState(false)
 
   // Prevent hydration issues
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  // Load available wallets - memoized to prevent unnecessary re-runs
+  const loadWallets = useCallback(async () => {
+    if (!mounted) return
+
+    try {
+      const wallets = await walletManager.getAvailableWallets()
+      setAvailableWallets(wallets)
+    } catch (error) {
+      console.error('Failed to load available wallets:', error)
+    }
+  }, [walletManager, mounted])
+
   // Load available wallets
+  useEffect(() => {
+    loadWallets()
+  }, [loadWallets])
+
+  // Auto-connect on first load
   useEffect(() => {
     if (!mounted) return
 
-    const loadWallets = async () => {
+    const performAutoConnect = async () => {
+      setIsAutoConnecting(true)
       try {
-        const wallets = await walletManager.getAvailableWallets()
-        setAvailableWallets(wallets)
+        const account = await walletManager.autoConnectToKey0()
+        if (account) {
+          // Update state directly to avoid dependency issues
+          const currentAccount = walletManager.getCurrentAccount()
+          const connected = walletManager.isConnected()
+          setCurrentAccount(currentAccount)
+          setIsConnected(connected)
+        }
       } catch (error) {
-        console.error('Failed to load available wallets:', error)
+        console.error('🔄 WalletContext: Auto-connect failed:', error)
+      } finally {
+        setIsAutoConnecting(false)
       }
     }
-    loadWallets()
-  }, [walletManager, mounted])
+
+    performAutoConnect()
+  }, [mounted, walletManager])
 
   // Update state from wallet manager
-  const updateState = useCallback(() => {
+  const updateState = useCallback(async () => {
     const account = walletManager.getCurrentAccount()
     const connected = walletManager.isConnected()
 
     setCurrentAccount(account)
     setIsConnected(connected)
-  }, [walletManager])
+
+    // If wallet is connected, immediately check delegation synchronously
+    if (connected && account) {
+      try {
+        await walletManager.checkCurrentDelegation()
+        const delegation = walletManager.getCurrentDelegation()
+        const nonce = await walletManager.getCurrentNonce()
+
+        setCurrentDelegation(delegation)
+        setCurrentNonce(nonce)
+        setIsRenewingAccount(false)
+      } catch (error) {
+        console.error('❌ Context: Immediate delegation check failed:', error)
+        setCurrentDelegation(null)
+        setCurrentNonce(null)
+        setIsRenewingAccount(false)
+      }
+    } else {
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+      setIsRenewingAccount(false)
+    }
+
+    // Return a promise that resolves after state updates are fully processed
+    return new Promise<void>((resolve) => {
+      // Use multiple microtasks to ensure ALL state updates are processed
+      queueMicrotask(() => {
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            resolve();
+          });
+        });
+      });
+    });
+  }, [walletManager, currentAccount, isConnected])
+
+  // Auto-connect to KEY0
+  const autoConnectToKey0 = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const account = await walletManager.autoConnectToKey0()
+      await updateState()
+      await checkCurrentDelegation();
+      return account
+    } catch (err) {
+      console.error('❌ Context: autoConnectToKey0 error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to auto-connect'
+      setError(errorMessage)
+      throw err
+    } finally {
+
+      setIsLoading(false)
+    }
+  }, [walletManager, updateState])
+
+  // Set up state change callback - memoized callback to prevent recreation
+  const stateChangeCallback = useCallback(() => {
+    updateState()
+  }, [updateState])
 
   // Set up state change callback
   useEffect(() => {
     if (!mounted) return
 
-    walletManager.setStateChangeCallback(() => {
-      updateState()
-    })
-  }, [walletManager, mounted])
+    walletManager.setStateChangeCallback(stateChangeCallback)
+  }, [walletManager, mounted, stateChangeCallback])
 
   // Connect to wallet
   const connectWallet = useCallback(async (type: WalletType, keyIndex?: number) => {
     setIsLoading(true)
+    // Set renewal state when connecting to a specific account
+    if (keyIndex !== undefined) {
+      setIsRenewingAccount(true)
+    }
     setError(null)
 
     try {
       const account = await walletManager.connectWallet(type, keyIndex)
-      updateState()
+      await updateState()
       return account
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect wallet'
@@ -114,6 +222,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       throw err
     } finally {
       setIsLoading(false)
+      if (keyIndex !== undefined) {
+        setIsRenewingAccount(false)
+      }
     }
   }, [walletManager, updateState])
 
@@ -191,6 +302,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
+  const signPermit = useCallback(async (amount: bigint) => {
+    if (!isConnected) {
+      throw new Error('No wallet connected')
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      return await walletManager.signPermit(amount)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign permit'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [walletManager, isConnected])
+
   const sendTransaction = useCallback(async (transaction: any) => {
     if (!isConnected) {
       throw new Error('No wallet connected')
@@ -228,8 +358,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false)
     }
   }, [walletManager, isConnected])
-
-
 
   const submit7702Authorization = useCallback(async (signedAuthorization: any) => {
     if (!isConnected) {
@@ -288,12 +416,44 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [walletManager, isConnected])
 
-  // Get wallet capabilities
-  const capabilities = walletManager.getCapabilities()
+  // Get wallet capabilities - memoized to prevent recreation
+  const capabilities = useMemo(() => walletManager.getCapabilities(), [walletManager])
 
   // Get available keys
   const getAvailableKeys = useCallback(async () => {
     return await walletManager.getAvailableKeys()
+  }, [walletManager])
+
+  // Check if local keys are available
+  const areLocalKeysAvailable = useCallback(async () => {
+    return await walletManager.areLocalKeysAvailable()
+  }, [walletManager])
+
+  // Get available injected accounts
+  const getAvailableInjectedAccounts = useCallback(async () => {
+    return await walletManager.getAvailableInjectedAccounts()
+  }, [walletManager])
+
+  // Get all available accounts
+  const getAllAvailableAccounts = useCallback(async () => {
+    return await walletManager.getAllAvailableAccounts()
+  }, [walletManager])
+
+  // EIP-7702 delegation status
+  const checkCurrentDelegation = useCallback(async () => {
+    try {
+      await walletManager.checkCurrentDelegation()
+      const delegation = walletManager.getCurrentDelegation()
+      const nonce = await walletManager.getCurrentNonce()
+
+      setCurrentDelegation(delegation)
+      setCurrentNonce(nonce)
+    } catch (error) {
+      console.error('❌ Context: Failed to check current delegation:', error)
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+      throw error; // Re-throw to trigger retry logic
+    }
   }, [walletManager])
 
   // Get clients
@@ -310,13 +470,85 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setError(null)
   }, [])
 
+  // Memoized delegatee functions to prevent recreation
+  const filterCurrentDelegatee = useCallback((currentDelegations: string, options: any[]) => {
+    return walletManager.filterCurrentDelegatee(currentDelegations, options)
+  }, [walletManager])
+
+  const isDelegateeSupported = useCallback((delegateeAddress: string) => {
+    return walletManager.isDelegateeSupported(delegateeAddress)
+  }, [walletManager])
+
+  const getDelegateeSupportInfo = useCallback((delegateeAddress: string) => {
+    return walletManager.getDelegateeSupportInfo(delegateeAddress)
+  }, [walletManager])
+
+  const getDelegateeOptionsWithReasons = useCallback((currentDelegations: string, options: any[]) => {
+    return walletManager.getDelegateeOptionsWithReasons(currentDelegations, options)
+  }, [walletManager])
+
+  // Memoized network functions
+  const getCurrentChainId = useCallback(() => {
+    return walletManager.getCurrentChainId()
+  }, [walletManager])
+
+  const getCurrentNetwork = useCallback(() => {
+    return walletManager.getCurrentNetwork()
+  }, [walletManager])
+
+  const switchNetwork = useCallback((chainId: number) => {
+    return walletManager.switchNetwork(chainId)
+  }, [walletManager])
+
+  const addNetwork = useCallback((chainId: number) => {
+    return walletManager.addNetwork(chainId)
+  }, [walletManager])
+
+  const getSupportedNetworks = useCallback(() => {
+    return walletManager.getSupportedNetworks()
+  }, [walletManager])
+
+  const getDefaultNetwork = useCallback(() => {
+    return walletManager.getDefaultNetwork()
+  }, [walletManager])
+
+  const setNetworkChangeCallback = useCallback((callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => {
+    return walletManager.setNetworkChangeCallback(callback)
+  }, [walletManager])
+
   // Initial state update
   useEffect(() => {
     if (!mounted) return
     updateState()
   }, [updateState, mounted])
 
-  const value: WalletContextType = {
+  // Check delegation when wallet connects or changes - memoized to prevent unnecessary re-runs
+  const checkDelegationEffect = useCallback(() => {
+    if (isConnected && currentAccount) {
+      checkCurrentDelegation()
+    } else {
+      setCurrentDelegation(null)
+      setCurrentNonce(null)
+    }
+  }, [isConnected, currentAccount, checkCurrentDelegation])
+
+  // Check delegation when wallet connects or changes
+  useEffect(() => {
+    checkDelegationEffect()
+  }, [checkDelegationEffect])
+
+
+
+
+
+
+  // Memoized derived values to prevent unnecessary recalculations
+  const address = useMemo(() => currentAccount?.address || null, [currentAccount?.address])
+  const publicClient = useMemo(() => isConnected ? getPublicClient() : null, [isConnected, getPublicClient])
+  const walletClient = useMemo(() => isConnected ? getWalletClient() : null, [isConnected, getWalletClient])
+
+  // Memoized context value to prevent unnecessary re-renders
+  const value = useMemo<WalletContextType>(() => ({
     // State
     isConnected,
     currentAccount,
@@ -324,46 +556,113 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     error,
     availableWallets,
     capabilities,
+    currentDelegation,
+    currentNonce,
+    address,
+    publicClient,
+    walletClient,
+    isAutoConnecting,
+    isRenewingAccount,
 
     // Actions
     connectWallet,
     disconnectWallet,
     switchWallet,
+    autoConnectToKey0,
     signMessage,
     signTypedData,
+    signPermit,
     sendTransaction,
     sign7702Authorization,
     submit7702Authorization,
     createSmartAccount,
     sendUserOperation,
     getAvailableKeys,
+    areLocalKeysAvailable,
+    getAvailableInjectedAccounts,
+    getAllAvailableAccounts,
     getPublicClient,
     getWalletClient,
     clearError,
-    getAvailableDelegatees: (currentDelegations: string, options: any[]) => walletManager.getAvailableDelegatees(currentDelegations, options),
-    isDelegateeSupported: (delegateeAddress: string) => walletManager.isDelegateeSupported(delegateeAddress),
-    getDelegateeOptions: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptions(currentDelegations, options),
-    getDelegateeSupportInfo: (delegateeAddress: string) => walletManager.getDelegateeSupportInfo(delegateeAddress),
-    getDelegateeOptionsWithReasons: (currentDelegations: string, options: any[]) => walletManager.getDelegateeOptionsWithReasons(currentDelegations, options),
+    checkCurrentDelegation,
+    filterCurrentDelegatee,
+    isDelegateeSupported,
+    getDelegateeSupportInfo,
+    getDelegateeOptionsWithReasons,
 
     // Network detection
-    getCurrentChainId: () => walletManager.getCurrentChainId(),
-    getCurrentNetwork: () => walletManager.getCurrentNetwork(),
+    getCurrentChainId,
+    getCurrentNetwork,
 
     // Network switching
-    switchNetwork: (chainId: number) => walletManager.switchNetwork(chainId),
-    addNetwork: (chainId: number) => walletManager.addNetwork(chainId),
-    getSupportedNetworks: () => walletManager.getSupportedNetworks(),
-    getDefaultNetwork: () => walletManager.getDefaultNetwork(),
-    setNetworkChangeCallback: (callback: (network: { chainId: number; name: string; isSupported: boolean }) => void) => walletManager.setNetworkChangeCallback(callback),
+    switchNetwork,
+    addNetwork,
+    getSupportedNetworks,
+    getDefaultNetwork,
+    setNetworkChangeCallback,
 
     // Utility
     walletManager
-  }
+  }), [
+    // State dependencies
+    isConnected,
+    currentAccount,
+    isLoading,
+    error,
+    availableWallets,
+    capabilities,
+    currentDelegation,
+    currentNonce,
+    address,
+    publicClient,
+    walletClient,
+    isAutoConnecting,
+
+    // Action dependencies
+    connectWallet,
+    disconnectWallet,
+    switchWallet,
+    autoConnectToKey0,
+    signMessage,
+    signTypedData,
+    signPermit,
+    sendTransaction,
+    sign7702Authorization,
+    submit7702Authorization,
+    createSmartAccount,
+    sendUserOperation,
+    getAvailableKeys,
+    areLocalKeysAvailable,
+    getAvailableInjectedAccounts,
+    getAllAvailableAccounts,
+    getPublicClient,
+    getWalletClient,
+    clearError,
+    checkCurrentDelegation,
+    filterCurrentDelegatee,
+    isDelegateeSupported,
+    getDelegateeSupportInfo,
+    getDelegateeOptionsWithReasons,
+
+    // Network dependencies
+    getCurrentChainId,
+    getCurrentNetwork,
+    switchNetwork,
+    addNetwork,
+    getSupportedNetworks,
+    getDefaultNetwork,
+    setNetworkChangeCallback,
+
+    // Utility dependencies
+    walletManager
+  ])
 
   if (!mounted) {
-    return <div>Loading...</div>
+    return <PageSkeleton />
   }
+
+  // Instead of blocking the entire page, pass loading states to children
+  // This allows pages to show their skeleton structure while loading
 
   return (
     <WalletContext.Provider value={value}>

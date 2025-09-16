@@ -9,10 +9,12 @@ export class WalletManager {
   private currentWallet: WalletInterface | null = null
   private currentAccount: WalletAccount | null = null
   private stateChangeCallback?: () => void
+  private isInitialized = false
+  private initializationPromise: Promise<void> | null = null
 
   constructor() {
     // Initialize wallets asynchronously
-    this.initializeWallets().catch(console.error)
+    this.initializationPromise = this.initializeWallets()
   }
 
   // Set callback for state changes
@@ -27,12 +29,22 @@ export class WalletManager {
     }
   }
 
+  // Wait for initialization to complete
+  async waitForInitialization(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise
+    }
+  }
+
   private async initializeWallets(): Promise<void> {
     // Initialize local key wallet
     const isLocalWalletAvailable = await LocalKeyWallet.isAvailable()
     if (isLocalWalletAvailable) {
       const localWallet = new LocalKeyWallet()
       this.wallets.set('local-key', localWallet)
+
+      // Wait for local keys to be loaded
+      await localWallet.areKeysLoaded()
     }
 
     // Initialize injected wallet (MetaMask)
@@ -41,10 +53,14 @@ export class WalletManager {
       const injectedWallet = new InjectedWallet()
       this.wallets.set('injected', injectedWallet)
     }
+
+    this.isInitialized = true
   }
 
   // Get available wallet configurations
   async getAvailableWallets(): Promise<WalletConfig[]> {
+    await this.waitForInitialization()
+
     const configs: WalletConfig[] = []
 
     // Local key wallet
@@ -76,8 +92,44 @@ export class WalletManager {
     return configs
   }
 
-    // Connect to a specific wallet type
+  // Auto-connect to KEY0 on first login
+  async autoConnectToKey0(): Promise<WalletAccount | null> {
+    await this.waitForInitialization()
+
+    // Check if we're already connected
+    if (this.isConnected()) {
+      return this.currentAccount
+    }
+
+    // Try to connect to local-key KEY0 first
+    const localWallet = this.wallets.get('local-key')
+    if (localWallet) {
+      try {
+        const account = await this.connectWallet('local-key', 0)
+        return account
+      } catch (error) {
+        // Continue to try other wallets if local-key fails
+      }
+    }
+
+    // If local-key fails, try injected wallet
+    const injectedWallet = this.wallets.get('injected')
+    if (injectedWallet) {
+      try {
+        const account = await this.connectWallet('injected')
+        return account
+      } catch (error) {
+        // Continue to try other wallets if injected wallet fails
+      }
+    }
+
+    return null
+  }
+
+  // Connect to a specific wallet type
   async connectWallet(type: WalletType, keyIndex?: number): Promise<WalletAccount> {
+    await this.waitForInitialization()
+
     const wallet = this.wallets.get(type)
 
     if (!wallet) {
@@ -90,6 +142,9 @@ export class WalletManager {
       if (type === 'local-key' && typeof keyIndex === 'number') {
         // Use the specific key index for environment private key wallets
         account = await (wallet as any).connectWithKey(keyIndex)
+      } else if (type === 'injected' && typeof keyIndex === 'number') {
+        // Use the specific account index for injected wallets
+        account = await (wallet as any).connect(keyIndex)
       } else {
         // Use default connection
         account = await wallet.connect()
@@ -97,15 +152,8 @@ export class WalletManager {
 
       // Set up account change callback for injected wallets
       if (type === 'injected' && (wallet as any).setAccountChangeCallback) {
-        ;(wallet as any).setAccountChangeCallback((newAccount: WalletAccount | null) => {
-          this.currentAccount = newAccount
-          if (!newAccount) {
-            this.currentWallet = null
-          } else {
-          }
-
-          // Notify React context of state change
-          this.notifyStateChange()
+        ;(wallet as any).setAccountChangeCallback(async (newAccount: WalletAccount | null) => {
+          await this.switchAccount(newAccount)
         })
       }
 
@@ -119,12 +167,27 @@ export class WalletManager {
     }
   }
 
+  // Switch to a different account
+  async switchAccount(newAccount: WalletAccount | null): Promise<void> {
+    if (newAccount) {
+      this.currentAccount = newAccount
+    } else {
+      this.currentWallet = null
+      this.currentAccount = null
+    }
+
+    // Notify React context of state change
+    this.notifyStateChange()
+  }
+
   // Disconnect current wallet
   async disconnectWallet(): Promise<void> {
     if (this.currentWallet) {
       await this.currentWallet.disconnect()
       this.currentWallet = null
       this.currentAccount = null
+      // Notify React context of state change
+      this.notifyStateChange()
     }
   }
 
@@ -160,8 +223,10 @@ export class WalletManager {
     return capabilities[operation] || false
   }
 
-    // Get available keys for local key wallet
+  // Get available keys for local key wallet - now returns a promise
   async getAvailableKeys() {
+    await this.waitForInitialization()
+
     const localWallet = this.wallets.get('local-key')
     if (localWallet && typeof (localWallet as any).getAvailableKeys === 'function') {
       const keys = await (localWallet as any).getAvailableKeys()
@@ -171,7 +236,70 @@ export class WalletManager {
         address: key.address
       }))
     }
+
     return []
+  }
+
+  // Check if local keys are loaded and available
+  async areLocalKeysAvailable(): Promise<boolean> {
+    await this.waitForInitialization()
+
+    const localWallet = this.wallets.get('local-key')
+    if (localWallet && typeof (localWallet as any).areKeysLoaded === 'function') {
+      return await (localWallet as any).areKeysLoaded()
+    }
+    return false
+  }
+
+  // Get available accounts for injected wallet (MetaMask) - now returns a promise
+  async getAvailableInjectedAccounts() {
+    await this.waitForInitialization()
+
+    console.log('🔍 WalletManager: Getting available injected accounts...')
+
+    const injectedWallet = this.wallets.get('injected')
+    console.log('🔍 WalletManager: Injected wallet found:', !!injectedWallet)
+
+    if (injectedWallet && typeof (injectedWallet as any).getAvailableAccounts === 'function') {
+      try {
+        console.log('🔍 WalletManager: Calling getAvailableAccounts on injected wallet...')
+        const accounts = await (injectedWallet as any).getAvailableAccounts()
+        console.log('🔍 WalletManager: Raw accounts from injected wallet:', accounts)
+
+        // Convert to the format expected by WalletSelector
+        const formattedAccounts = accounts.map((account: any, index: number) => ({
+          index: index,
+          address: account.address
+        }))
+
+        console.log('🔍 WalletManager: Formatted accounts:', formattedAccounts)
+        return formattedAccounts
+      } catch (error) {
+        console.error('❌ WalletManager: Error getting injected accounts:', error)
+        return []
+      }
+    }
+
+    console.log('❌ WalletManager: No injected wallet or getAvailableAccounts method not found')
+    return []
+  }
+
+  // Get all available accounts from all wallet types
+  async getAllAvailableAccounts(): Promise<{
+    localKeys: Array<{index: number, address: string}>,
+    injectedAccounts: Array<{index: number, address: string}>
+  }> {
+    await this.waitForInitialization()
+
+    const [localKeys, injectedAccounts] = await Promise.all([
+      this.getAvailableKeys(),
+      this.getAvailableInjectedAccounts()
+    ])
+
+    return {
+      localKeys,
+      injectedAccounts
+    }
   }
 
   // Convenience methods that delegate to current wallet
@@ -194,6 +322,13 @@ export class WalletManager {
       throw new Error('No wallet connected')
     }
     return await this.currentWallet.sendTransaction(transaction)
+  }
+
+  async signPermit(amount: bigint) {
+    if (!this.currentWallet) {
+      throw new Error('No wallet connected')
+    }
+    return await this.currentWallet.signPermit(amount)
   }
 
 
@@ -222,16 +357,16 @@ export class WalletManager {
     return await this.currentWallet.submit7702Authorization(signedAuthorization)
   }
 
-  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+  filterCurrentDelegatee(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
     if (!this.currentWallet) {
       throw new Error('No wallet connected')
     }
 
-    if (typeof this.currentWallet.getAvailableDelegatees !== 'function') {
+    if (typeof this.currentWallet.filterCurrentDelegatee !== 'function') {
       throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee filtering`)
     }
 
-    return this.currentWallet.getAvailableDelegatees(currentDelegations, options)
+    return this.currentWallet.filterCurrentDelegatee(currentDelegations, options)
   }
 
   isDelegateeSupported(delegateeAddress: string): boolean {
@@ -246,25 +381,11 @@ export class WalletManager {
     return this.currentWallet.isDelegateeSupported(delegateeAddress)
   }
 
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    if (!this.currentWallet) {
-      throw new Error('No wallet connected')
-    }
 
-    if (typeof this.currentWallet.getDelegateeOptions !== 'function') {
-      throw new Error(`Current wallet type '${this.currentWallet.getWalletType()}' does not support delegatee options`)
-    }
-
-    return this.currentWallet.getDelegateeOptions(currentDelegations, options)
-  }
 
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
     if (!this.currentWallet) {
       return { isSupported: false, reason: 'No wallet connected' }
-    }
-
-    if (typeof this.currentWallet.getDelegateeSupportInfo !== 'function') {
-      return { isSupported: true } // Default to supported if method doesn't exist
     }
 
     return this.currentWallet.getDelegateeSupportInfo(delegateeAddress)
@@ -452,5 +573,40 @@ export class WalletManager {
     if (typeof this.currentWallet.setNetworkChangeCallback === 'function') {
       this.currentWallet.setNetworkChangeCallback(callback)
     }
+  }
+
+  // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    if (!this.currentWallet || !this.currentAccount) {
+      return
+    }
+
+    if (typeof this.currentWallet.checkCurrentDelegation === 'function') {
+      await this.currentWallet.checkCurrentDelegation()
+    }
+  }
+
+  getCurrentDelegation(): string | null {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentDelegation === 'function') {
+      return this.currentWallet.getCurrentDelegation()
+    }
+
+    return null
+  }
+
+  async getCurrentNonce(): Promise<number | null> {
+    if (!this.currentWallet) {
+      return null
+    }
+
+    if (typeof this.currentWallet.getCurrentNonce === 'function') {
+      return await this.currentWallet.getCurrentNonce()
+    }
+
+    return null
   }
 }

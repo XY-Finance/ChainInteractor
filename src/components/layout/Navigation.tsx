@@ -8,30 +8,21 @@ export default function Navigation() {
   const pathname = usePathname()
 
   return (
-    <nav className="bg-white shadow-sm border-b">
+    <nav className="sticky top-0 z-50 bg-white shadow-sm border-b">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/eip7702" className="text-xl font-bold text-gray-900">
-                EIP-7702 Demo
+              <Link href="/wallet-actions" className="text-xl font-bold text-gray-900">
+                ‍️✨✨  Super Smart Wallet ✨✨
               </Link>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link
-                href="/eip7702"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  pathname === '/eip7702'
-                    ? 'border-purple-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                EIP-7702 Authorization
-              </Link>
-
+            {/* Scrollable navigation for growing number of modules */}
+            <div className="ml-6 flex overflow-x-auto scrollbar-hide">
+              <div className="flex space-x-8 px-2">
               <Link
                 href="/wallet-actions"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium whitespace-nowrap ${
                   pathname === '/wallet-actions'
                     ? 'border-orange-500 text-gray-900'
                     : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
@@ -41,7 +32,7 @@ export default function Navigation() {
               </Link>
               <Link
                 href="/zerodev"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium whitespace-nowrap ${
                   pathname === '/zerodev'
                     ? 'border-blue-500 text-gray-900'
                     : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
@@ -49,6 +40,27 @@ export default function Navigation() {
               >
                 ZeroDev Demo
               </Link>
+              <Link
+                href="/hyperintent"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium whitespace-nowrap ${
+                  pathname === '/hyperintent'
+                    ? 'border-blue-500 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                HyperIntent
+              </Link>
+              <Link
+                href="/transaction-builder"
+                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium whitespace-nowrap ${
+                  pathname === '/transaction-builder'
+                    ? 'border-green-500 text-gray-900'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                }`}
+              >
+                Transaction Builder
+              </Link>
+              </div>
             </div>
           </div>
 

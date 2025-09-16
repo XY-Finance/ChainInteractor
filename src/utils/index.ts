@@ -44,9 +44,9 @@ export function validateAmount(amount: string): boolean {
   return !isNaN(num) && num > 0
 }
 
-export function validateRecipientAddress(address: string): boolean {
-  return isValidAddress(address) && address !== '0x0000000000000000000000000000000000000000'
-}
+// Note: validateRecipientAddress moved to typeUtils.ts
+// Use: import { validateRecipientAddress } from './typeUtils'
+// Then call: validateRecipientAddress(address, isValidAddress)
 
 /**
  * Parse environment variable list using multiple conventions

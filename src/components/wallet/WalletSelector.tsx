@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
 import { type WalletType } from '../../types/wallet'
 import { Button } from '../ui/Button'
-import { Card } from '../ui/Card'
 
 export function WalletSelector() {
   const {
@@ -17,45 +16,75 @@ export function WalletSelector() {
     disconnectWallet,
     switchWallet,
     getAvailableKeys,
+    getAvailableInjectedAccounts,
+    getAllAvailableAccounts,
     clearError
   } = useWalletManager()
 
   const [availableKeys, setAvailableKeys] = useState<Array<{index: number, address: string}>>([])
-  const [showKeySelector, setShowKeySelector] = useState(false)
+  const [availableInjectedAccounts, setAvailableInjectedAccounts] = useState<Array<{index: number, address: string}>>([])
+  const [showAccountSelector, setShowAccountSelector] = useState(false)
+  const [selectedWalletType, setSelectedWalletType] = useState<WalletType | null>(null)
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false)
 
-  // Load available keys when component mounts
+  // Load all available accounts when component mounts
   useEffect(() => {
-    const loadKeys = async () => {
+    const loadAccounts = async () => {
       try {
-        console.log('🔧 Loading available keys...')
-        const keys = await getAvailableKeys()
-        console.log('📋 Loaded keys:', keys)
-        setAvailableKeys(keys)
+        setIsLoadingAccounts(true)
+        console.log('🔧 Loading all available accounts...')
+        const { localKeys, injectedAccounts } = await getAllAvailableAccounts()
+        console.log('📋 Loaded local keys:', localKeys)
+        console.log('📋 Loaded injected accounts:', injectedAccounts)
+        setAvailableKeys(localKeys)
+        setAvailableInjectedAccounts(injectedAccounts)
       } catch (err) {
-        console.error('Failed to load available keys:', err)
+        console.error('Failed to load available accounts:', err)
+      } finally {
+        setIsLoadingAccounts(false)
       }
     }
-    loadKeys()
-  }, [getAvailableKeys])
+    loadAccounts()
+  }, [getAllAvailableAccounts])
 
-      const handleConnect = async (type: WalletType) => {
+  const handleConnect = async (type: WalletType) => {
     try {
+      setSelectedWalletType(type)
+
       if (type === 'local-key') {
-        // For local key wallet, always check if we have multiple keys
+        // For local key wallet, check if we have multiple keys
         if (availableKeys.length > 1) {
-          setShowKeySelector(true)
+          setShowAccountSelector(true)
         } else if (availableKeys.length === 1) {
           await connectWallet(type, 0) // Connect to the first (and only) key
         } else {
           // Try to load keys first, then check again
-          const keys = await getAvailableKeys()
-          if (keys.length > 1) {
-            setAvailableKeys(keys)
-            setShowKeySelector(true)
-          } else if (keys.length === 1) {
+          const { localKeys } = await getAllAvailableAccounts()
+          if (localKeys.length > 1) {
+            setAvailableKeys(localKeys)
+            setShowAccountSelector(true)
+          } else if (localKeys.length === 1) {
             await connectWallet(type, 0)
           } else {
             throw new Error('No local keys available')
+          }
+        }
+      } else if (type === 'injected') {
+        // For injected wallet, check if we have multiple accounts
+        if (availableInjectedAccounts.length > 1) {
+          setShowAccountSelector(true)
+        } else if (availableInjectedAccounts.length === 1) {
+          await connectWallet(type, 0) // Connect to the first account
+        } else {
+          // Try to load accounts first, then check again
+          const { injectedAccounts } = await getAllAvailableAccounts()
+          if (injectedAccounts.length > 1) {
+            setAvailableInjectedAccounts(injectedAccounts)
+            setShowAccountSelector(true)
+          } else if (injectedAccounts.length === 1) {
+            await connectWallet(type, 0)
+          } else {
+            await connectWallet(type) // Let the wallet handle account selection
           }
         }
       } else {
@@ -66,12 +95,17 @@ export function WalletSelector() {
     }
   }
 
-  const handleConnectWithKey = async (keyIndex: number) => {
+  const handleConnectWithAccount = async (keyIndex: number) => {
     try {
-      await connectWallet('local-key', keyIndex)
-      setShowKeySelector(false)
+      if (selectedWalletType === 'local-key') {
+        await connectWallet('local-key', keyIndex)
+      } else if (selectedWalletType === 'injected') {
+        await connectWallet('injected', keyIndex)
+      }
+      setShowAccountSelector(false)
+      setSelectedWalletType(null)
     } catch (err) {
-      console.error('Failed to connect with key:', err)
+      console.error('Failed to connect with account:', err)
     }
   }
 
@@ -85,15 +119,72 @@ export function WalletSelector() {
 
   const handleSwitchWallet = async (type: WalletType) => {
     try {
-      await switchWallet(type)
+      setSelectedWalletType(type)
+
+      if (type === 'local-key') {
+        // For local key wallet, check if we have multiple keys
+        if (availableKeys.length > 1) {
+          setShowAccountSelector(true)
+        } else if (availableKeys.length === 1) {
+          await switchWallet(type, 0)
+        } else {
+          // Try to load keys first, then check again
+          const { localKeys } = await getAllAvailableAccounts()
+          if (localKeys.length > 1) {
+            setAvailableKeys(localKeys)
+            setShowAccountSelector(true)
+          } else if (localKeys.length === 1) {
+            await switchWallet(type, 0)
+          } else {
+            throw new Error('No local keys available')
+          }
+        }
+      } else if (type === 'injected') {
+        // For injected wallet, check if we have multiple accounts
+        if (availableInjectedAccounts.length > 1) {
+          setShowAccountSelector(true)
+        } else if (availableInjectedAccounts.length === 1) {
+          await switchWallet(type, 0)
+        } else {
+          // Try to load accounts first, then check again
+          const { injectedAccounts } = await getAllAvailableAccounts()
+          if (injectedAccounts.length > 1) {
+            setAvailableInjectedAccounts(injectedAccounts)
+            setShowAccountSelector(true)
+          } else if (injectedAccounts.length === 1) {
+            await switchWallet(type, 0)
+          } else {
+            await switchWallet(type) // Let the wallet handle account selection
+          }
+        }
+      } else {
+        await switchWallet(type)
+      }
     } catch (err) {
       console.error('Failed to switch wallet:', err)
     }
   }
 
+  const getAccountList = () => {
+    if (selectedWalletType === 'local-key') {
+      return availableKeys.map(key => ({
+        index: key.index,
+        address: key.address,
+        label: `Local Key #${key.index}`
+      }))
+    } else if (selectedWalletType === 'injected') {
+      return availableInjectedAccounts.map(account => ({
+        index: account.index,
+        address: account.address,
+        label: `MetaMask Account #${account.index}`
+      }))
+    }
+    return []
+  }
+
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold mb-4">Wallet Connection</h2>
+    <div className="w-full">
+      <h3 className="text-lg font-semibold mb-3">Wallet Connection</h3>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -109,30 +200,32 @@ export function WalletSelector() {
         </div>
       )}
 
-      {showKeySelector ? (
-        <div className="space-y-4">
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <h3 className="font-medium text-blue-800 mb-3">Select Private Key</h3>
-            <p className="text-sm text-blue-600 mb-4">
-              Multiple private keys found. Choose which one to connect with:
+      {showAccountSelector ? (
+        <div className="space-y-3">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+            <h4 className="font-medium text-blue-800 mb-2">
+              Select {selectedWalletType === 'local-key' ? 'Private Key' : 'Account'}
+            </h4>
+            <p className="text-sm text-blue-600 mb-3">
+              Multiple {selectedWalletType === 'local-key' ? 'private keys' : 'accounts'} found. Choose which one to connect with:
             </p>
             <div className="space-y-2">
-              {availableKeys.map((key) => (
+              {getAccountList().map((account) => (
                 <div
-                  key={key.index}
-                  className="p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
-                  onClick={() => handleConnectWithKey(key.index)}
+                  key={account.index}
+                  className="p-2 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer"
+                  onClick={() => handleConnectWithAccount(account.index)}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Key #{key.index}</p>
+                      <p className="text-sm font-medium">{account.label}</p>
                       <div className="group relative">
-                        <p className="text-xs text-gray-600 font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={key.address}>
-                          {key.address}
+                        <p className="text-xs text-gray-600 font-mono overflow-hidden text-ellipsis whitespace-nowrap" title={account.address}>
+                          {account.address}
                         </p>
                         {/* Tooltip for full address */}
                         <div className="absolute left-0 bottom-full mb-1 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                          {key.address}
+                          {account.address}
                           <div className="absolute top-full left-4 w-0 h-0 border-l-2 border-r-2 border-t-2 border-b-0 border-transparent border-t-gray-900"></div>
                         </div>
                       </div>
@@ -140,7 +233,7 @@ export function WalletSelector() {
                     <Button
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleConnectWithKey(key.index)
+                        handleConnectWithAccount(account.index)
                       }}
                       size="sm"
                       className="ml-2 flex-shrink-0"
@@ -152,7 +245,10 @@ export function WalletSelector() {
               ))}
             </div>
             <Button
-              onClick={() => setShowKeySelector(false)}
+              onClick={() => {
+                setShowAccountSelector(false)
+                setSelectedWalletType(null)
+              }}
               variant="outline"
               size="sm"
               className="mt-3"
@@ -162,9 +258,9 @@ export function WalletSelector() {
           </div>
         </div>
       ) : isConnected ? (
-        <div className="space-y-4">
-          <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-            <h3 className="font-medium text-green-800">Connected</h3>
+        <div className="space-y-3">
+          <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+            <h4 className="font-medium text-green-800">Connected</h4>
             <div className="group relative">
               <p className="text-sm text-green-600 mt-1 overflow-hidden text-ellipsis whitespace-nowrap" title={currentAccount?.address}>
                 Address: {currentAccount?.address}
@@ -190,16 +286,17 @@ export function WalletSelector() {
               onClick={handleDisconnect}
               disabled={isLoading}
               variant="outline"
+              size="sm"
             >
               {isLoading ? 'Disconnecting...' : 'Disconnect'}
             </Button>
           </div>
 
-          <div className="border-t pt-4">
-            <h4 className="font-medium mb-2">Switch Wallet</h4>
+          <div className="border-t pt-3">
+            <h5 className="font-medium mb-2 text-sm">Switch Wallet</h5>
             <div className="flex flex-wrap gap-2">
               {availableWallets
-                .filter(wallet => wallet.isAvailable && wallet.type !== currentAccount?.type)
+                .filter(wallet => wallet.isAvailable)
                 .map(wallet => (
                   <Button
                     key={wallet.type}
@@ -215,16 +312,16 @@ export function WalletSelector() {
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <p className="text-gray-600 text-sm">
             Choose a wallet type to connect:
           </p>
 
-          <div className="grid gap-3">
-                        {availableWallets.map(wallet => (
+          <div className="space-y-2">
+            {availableWallets.map(wallet => (
               <div
                 key={wallet.type}
-                className={`p-4 border rounded-md ${
+                className={`p-3 border rounded-md ${
                   wallet.isAvailable
                     ? 'border-gray-200 hover:border-gray-300 cursor-pointer'
                     : 'border-gray-100 bg-gray-50 cursor-not-allowed'
@@ -233,8 +330,8 @@ export function WalletSelector() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-medium">{wallet.name}</h3>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <h4 className="font-medium text-sm">{wallet.name}</h4>
+                    <p className="text-xs text-gray-600 mt-1">
                       {wallet.description}
                     </p>
                     {wallet.type === 'local-key' && availableKeys.length > 0 && (
@@ -242,15 +339,20 @@ export function WalletSelector() {
                         {availableKeys.length} key{availableKeys.length > 1 ? 's' : ''} available
                       </p>
                     )}
+                    {wallet.type === 'injected' && availableInjectedAccounts.length > 0 && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        {availableInjectedAccounts.length} account{availableInjectedAccounts.length > 1 ? 's' : ''} available
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {wallet.isAvailable ? (
                       <Button
                         onClick={() => handleConnect(wallet.type)}
-                        disabled={isLoading}
+                        disabled={isLoading || isLoadingAccounts}
                         size="sm"
                       >
-                        {isLoading ? 'Connecting...' : 'Connect'}
+                        {isLoading || isLoadingAccounts ? 'Loading...' : 'Connect'}
                       </Button>
                     ) : (
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
@@ -264,11 +366,11 @@ export function WalletSelector() {
           </div>
 
           {availableWallets.every(wallet => !wallet.isAvailable) && (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
               <p className="text-yellow-800 text-sm">
                 No wallets are currently available. Make sure you have:
               </p>
-              <ul className="text-yellow-700 text-sm mt-2 list-disc list-inside space-y-1">
+              <ul className="text-yellow-700 text-xs mt-2 list-disc list-inside space-y-1">
                 <li>Set up your PRIVATE_KEY in .env file for environment wallet</li>
                 <li>Installed MetaMask or similar for injected wallet</li>
                 <li>Configured embedded wallet provider</li>
@@ -277,6 +379,6 @@ export function WalletSelector() {
           )}
         </div>
       )}
-    </Card>
+    </div>
   )
 }

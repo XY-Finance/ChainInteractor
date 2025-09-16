@@ -49,15 +49,21 @@ export interface WalletInterface {
   signMessage(message: string): Promise<Hex>
   signTypedData(domain: any, types: any, message: any): Promise<Hex>
   sendTransaction(transaction: unknown): Promise<Hex>
+  signPermit(amount: bigint): Promise<any>
 
   // EIP-7702 specific methods
   sign7702Authorization(authorizationData: unknown): Promise<any> // Returns authorization + verification data
   submit7702Authorization(signedAuthorization: any): Promise<Hex>
-  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[]
+  filterCurrentDelegatee(currentDelegations: string | null, options: DelegateeContract[]): DelegateeContract[]
   isDelegateeSupported(delegateeAddress: string): boolean
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }>
+
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string }
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }>
+
+  // EIP-7702 delegation status methods
+  checkCurrentDelegation?(): Promise<void>
+  getCurrentDelegation?(): string | null
+  getCurrentNonce?(): Promise<number | null>
 
   // Smart account methods
   createSmartAccount(): Promise<Address>

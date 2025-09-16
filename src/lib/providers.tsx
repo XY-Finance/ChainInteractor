@@ -6,6 +6,7 @@ import { RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import { config } from '../config/config'
 import { WalletProvider } from '../contexts/WalletContext'
 import { useState, useEffect } from 'react'
+import { PageSkeleton } from '../components/ui/PageSkeleton'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -23,7 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   if (!mounted) {
-    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">Loading...</div>
+    return <PageSkeleton />
   }
 
   return (

@@ -4,6 +4,7 @@ import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { useState } from 'react'
 import { useWalletManager } from '../../hooks/useWalletManager'
+import { AddressSelector } from '../../components/ui'
 
 export default function Home() {
   const { isConnected, currentAccount, error } = useWalletManager()
@@ -42,7 +43,7 @@ export default function Home() {
           </p>
           <div className="mt-6">
             <a
-              href="/eip7702"
+              href="/wallet-actions"
               className="inline-flex items-center px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
             >
               🚀 Try MetaMask EIP-7702 Authorization
@@ -92,12 +93,10 @@ export default function Home() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Recipient Address
                     </label>
-                    <input
-                      type="text"
+                    <AddressSelector
                       value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="0x..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={setRecipient}
+                      placeholder="Select recipient address..."
                     />
                   </div>
 

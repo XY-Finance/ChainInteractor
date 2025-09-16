@@ -98,6 +98,11 @@ export abstract class BaseWallet implements WalletInterface {
     })
   }
 
+  async signPermit(amount: bigint): Promise<any> {
+    // This method must be implemented by specific wallet types
+    throw new Error('signPermit not implemented for this wallet type')
+  }
+
   // EIP-7702 specific methods
   async sign7702Authorization(authorizationData: any): Promise<Hex> {
     if (!this.walletClient) {
@@ -123,8 +128,12 @@ export abstract class BaseWallet implements WalletInterface {
     throw new Error('submit7702Authorization not implemented for this wallet type')
   }
 
-  // Delegatee filtering method
-  getAvailableDelegatees(currentDelegations: string, options: DelegateeContract[]): DelegateeContract[] {
+    // Delegatee filtering method
+  filterCurrentDelegatee(currentDelegations: string | null, options: DelegateeContract[]): DelegateeContract[] {
+    // CRITICAL ERROR: currentDelegations should NEVER be null
+    if (!currentDelegations) {
+      throw new Error(`🚨 CRITICAL ERROR: currentDelegations is null! This should NEVER happen. Wallet type: ${this.getWalletType()}`)
+    }
     return options.filter(contract => contract.address.toLowerCase() !== currentDelegations.toLowerCase())
   }
 
@@ -135,14 +144,7 @@ export abstract class BaseWallet implements WalletInterface {
     return true
   }
 
-  // Get delegatee options with support information
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
-    return availableOptions.map(contract => ({
-      ...contract,
-      isSupported: this.isDelegateeSupported(contract.address)
-    }))
-  }
+
 
   // Get detailed support information for a delegatee
   getDelegateeSupportInfo(delegateeAddress: string): { isSupported: boolean; reason?: string } {
@@ -154,12 +156,28 @@ export abstract class BaseWallet implements WalletInterface {
   }
 
   // Get delegatee options with detailed support information
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    const availableOptions = this.filterCurrentDelegatee(currentDelegations, options)
     return availableOptions.map(contract => ({
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)
     }))
+  }
+
+  // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    // Base implementation - no delegation checking
+    // Override in specific wallet implementations
+  }
+
+  getCurrentDelegation(): string | null {
+    // Base implementation - no delegation
+    return null
+  }
+
+  async getCurrentNonce(): Promise<number | null> {
+    // Base implementation - no nonce tracking
+    return null
   }
 
   // Smart account methods

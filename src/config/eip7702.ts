@@ -1,4 +1,5 @@
 import { sepolia } from 'viem/chains'
+import { DELEGATEE_CONTRACTS } from './delegateeContracts'
 
 // EIP-7702 Configuration
 export const EIP7702_CONFIG = {
@@ -20,19 +21,8 @@ export const EIP7702_CONFIG = {
     maxPriorityFeePerGas: BigInt(1),
   },
 
-  // Delegatee contracts configuration
-  delegateeContracts: [
-    {
-      name: 'MetaMask deleGator Core',
-      description: 'Core MetaMask deleGator implementation for EIP-7702',
-      implementation: 'Stateless7702' as const,
-    },
-    {
-      name: 'Custom EIP-7702 Delegator',
-      description: 'Custom implementation for EIP-7702 delegation',
-      implementation: 'Stateless7702' as const,
-    },
-  ],
+  // Delegatee contracts configuration - imported from centralized config
+  delegateeContracts: DELEGATEE_CONTRACTS,
 
   // UI settings
   ui: {

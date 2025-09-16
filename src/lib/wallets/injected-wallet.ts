@@ -24,13 +24,17 @@ const SUPPORTED_NETWORKS = [
 export class InjectedWallet extends BaseWallet {
   private ethereum: any
   private onAccountChange?: (account: WalletAccount | null) => void
+  private onNetworkChange?: (network: { chainId: number; name: string; isSupported: boolean }) => void
+  private currentChainId: number | null = null
+  private currentDelegation: string | null = null
+  private currentNonce: number | null = null
 
   static async isAvailable(): Promise<boolean> {
     if (typeof window === 'undefined') return false
     return !!(window as any).ethereum
   }
 
-  async connect(): Promise<WalletAccount> {
+  async connect(accountIndex?: number): Promise<WalletAccount> {
     if (!this.ethereum) {
       this.ethereum = (window as any).ethereum
     }
@@ -49,8 +53,18 @@ export class InjectedWallet extends BaseWallet {
         throw new Error('No accounts found')
       }
 
-      const address = accounts[0] as Address
+      // If accountIndex is provided, use that specific account
+      const targetIndex = accountIndex !== undefined ? accountIndex : 0
+      if (targetIndex >= accounts.length) {
+        throw new Error(`Account index ${targetIndex} is out of range. Available accounts: ${accounts.length}`)
+      }
+
+      const address = accounts[targetIndex] as Address
       this.account = this.createAccount(address, 'injected')
+
+      // Get current chain ID
+      const chainIdHex = await this.ethereum.request({ method: 'eth_chainId' })
+      this.currentChainId = parseInt(chainIdHex, 16)
 
       // Create wallet client
       this.walletClient = createWalletClient({
@@ -59,10 +73,12 @@ export class InjectedWallet extends BaseWallet {
       })
 
       // Set up account change listener
-      this.ethereum.on('accountsChanged', (accounts: string[]) => {
+      this.ethereum.on('accountsChanged', async (accounts: string[]) => {
         if (accounts.length === 0) {
           // User disconnected
           this.account = null
+          this.currentDelegation = null
+          this.currentNonce = null
           if (this.onAccountChange) {
             this.onAccountChange(null)
           }
@@ -70,11 +86,37 @@ export class InjectedWallet extends BaseWallet {
           // User switched accounts
           const newAddress = accounts[0] as Address
           this.account = this.createAccount(newAddress, 'injected')
+
+          // Refresh delegation status for the new account
+          await this.checkCurrentDelegation()
+
           if (this.onAccountChange) {
             this.onAccountChange(this.account)
           }
         }
       })
+
+      // Set up chain change listener
+      this.ethereum.on('chainChanged', (chainIdHex: string) => {
+        this.currentChainId = parseInt(chainIdHex, 16)
+        const network = this.getCurrentNetwork()
+
+        // Notify state change when network changes
+        if (this.onAccountChange) {
+          this.onAccountChange(this.account)
+        }
+
+        // Notify network change
+        if (this.onNetworkChange) {
+          this.onNetworkChange(network)
+        }
+      })
+
+      // Notify initial network state immediately after connection
+      const initialNetwork = this.getCurrentNetwork()
+      if (this.onNetworkChange) {
+        this.onNetworkChange(initialNetwork)
+      }
 
       return this.account
     } catch (error) {
@@ -83,12 +125,61 @@ export class InjectedWallet extends BaseWallet {
   }
 
   async disconnect(): Promise<void> {
+    // Remove event listeners if ethereum is available
+    if (this.ethereum) {
+      // Remove account change listener
+      this.ethereum.removeAllListeners('accountsChanged')
+      // Remove chain change listener
+      this.ethereum.removeAllListeners('chainChanged')
+    }
+
     this.account = null
     this.onAccountChange = undefined
+    this.onNetworkChange = undefined
   }
 
   async getAccount(): Promise<WalletAccount | null> {
     return this.account
+  }
+
+  // Get all available accounts from MetaMask
+  async getAvailableAccounts(): Promise<WalletAccount[]> {
+    if (!this.ethereum) {
+      console.log('No injected wallet available, returning empty array')
+      return []
+    }
+
+    try {
+      console.log('🔧 InjectedWallet: Getting available accounts...')
+
+      // First try to get accounts without prompting (eth_accounts)
+      let accounts = await this.ethereum.request({
+        method: 'eth_accounts'
+      })
+
+      // If no accounts found, try requesting accounts (eth_requestAccounts)
+      if (accounts.length === 0) {
+        console.log('🔧 InjectedWallet: No accounts found with eth_accounts, trying eth_requestAccounts...')
+        accounts = await this.ethereum.request({
+          method: 'eth_requestAccounts'
+        })
+      }
+
+      console.log(`🔧 InjectedWallet: Found ${accounts.length} accounts from MetaMask:`, accounts)
+
+      if (accounts.length === 0) {
+        return []
+      }
+
+      // Convert addresses to WalletAccount objects
+      const walletAccounts = accounts.map((address: string) => this.createAccount(address as Address, 'injected'))
+      console.log('🔧 InjectedWallet: Converted to wallet accounts:', walletAccounts)
+
+      return walletAccounts
+    } catch (error) {
+      console.error('❌ InjectedWallet: Failed to get available accounts:', error)
+      return []
+    }
   }
 
   getCapabilities(): WalletCapabilities {
@@ -106,22 +197,7 @@ export class InjectedWallet extends BaseWallet {
 
   // Override delegatee support for MetaMask
   isDelegateeSupported(delegateeAddress: string): boolean {
-    // MetaMask only supports delegating to the specific MetaMask deleGator Core contract
-    // It does NOT support revocation or any other delegatees
-    const supportedAddresses: string[] = [
-      addresses.delegatee.metamask
-    ]
-
-    return supportedAddresses.includes(delegateeAddress.toLowerCase())
-  }
-
-  // Override getDelegateeOptions to provide MetaMask-specific behavior
-  getDelegateeOptions(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
-    return availableOptions.map(contract => ({
-      ...contract,
-      isSupported: this.isDelegateeSupported(contract.address)
-    }))
+    return delegateeAddress.toLowerCase() === addresses.delegatee.metamask.toLowerCase()
   }
 
   // Override getDelegateeSupportInfo to provide MetaMask-specific reasons
@@ -138,9 +214,16 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
-  // Override getDelegateeOptionsWithReasons for MetaMask
-  getDelegateeOptionsWithReasons(currentDelegations: string, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
-    const availableOptions = this.getAvailableDelegatees(currentDelegations, options)
+    // Override getDelegateeOptionsWithReasons for MetaMask
+  getDelegateeOptionsWithReasons(currentDelegations: string | null, options: DelegateeContract[]): Array<DelegateeContract & { isSupported: boolean; reason?: string }> {
+    // CRITICAL ERROR: currentDelegations should NEVER be null
+    if (!currentDelegations) {
+      throw new Error(`🚨 CRITICAL ERROR: currentDelegations is null! This should NEVER happen. Wallet type: ${this.getWalletType()}`)
+    }
+
+    const availableOptions = options.filter(contract =>
+      contract.address.toLowerCase() !== currentDelegations.toLowerCase()
+    )
     return availableOptions.map(contract => ({
       ...contract,
       ...this.getDelegateeSupportInfo(contract.address)
@@ -185,6 +268,65 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
+  // Override signPermit for ERC20 permit signing
+  async signPermit(amount: bigint): Promise<any> {
+    if (!this.ethereum || !this.account) {
+      throw new Error('No injected wallet connected')
+    }
+
+    // This is a simplified implementation
+    // In a real app, you'd need to get the token contract details and nonce
+    const domain = {
+      name: 'USDC',
+      version: '1',
+      chainId: 11155111, // Sepolia
+      verifyingContract: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' // Sepolia USDC
+    }
+
+    const types = {
+      Permit: [
+        { name: 'owner', type: 'address' },
+        { name: 'spender', type: 'address' },
+        { name: 'value', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'deadline', type: 'uint256' }
+      ]
+    }
+
+    const message = {
+      owner: this.account.address,
+      spender: '0x856c363e043Ac34B19D584D3930bfa615947994E',
+      value: amount.toString(),
+      nonce: '0', // This should be fetched from the contract
+      deadline: Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
+    }
+
+    try {
+      const signature = await this.ethereum.request({
+        method: 'eth_signTypedData_v4',
+        params: [this.account.address, JSON.stringify({
+          types,
+          primaryType: 'Permit',
+          domain,
+          message
+        })]
+      })
+
+      return {
+        owner: message.owner,
+        spender: message.spender,
+        value: message.value,
+        nonce: message.nonce,
+        deadline: message.deadline,
+        r: signature.slice(0, 66),
+        s: '0x' + signature.slice(66, 130),
+        v: parseInt(signature.slice(130, 132), 16)
+      }
+    } catch (error) {
+      throw new Error(`Failed to sign permit: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   // Override sign7702Authorization for MetaMask
   // Note: MetaMask doesn't expose sign7702Auth directly, but handles atomic batching through wallet_sendCalls
   async sign7702Authorization(authorizationData: any): Promise<any> {
@@ -221,7 +363,77 @@ export class InjectedWallet extends BaseWallet {
     }
   }
 
-    // Override submit7702Authorization to handle EIP-7702 authorization submission
+    // EIP-7702 delegation status methods
+  async checkCurrentDelegation(): Promise<void> {
+    console.log('🔍 Starting delegation check...');
+
+    if (!this.ethereum) {
+      console.log('❌ No ethereum provider available');
+      this.currentDelegation = null;
+      this.currentNonce = null;
+      return;
+    }
+
+    if (!this.account) {
+      console.log('❌ No account connected');
+      this.currentDelegation = null;
+      this.currentNonce = null;
+      return;
+    }
+
+    try {
+      console.log(`🔍 Checking delegation for account: ${this.account.address}`);
+
+      // Get current account
+      const [from] = await this.ethereum.request({ method: 'eth_requestAccounts' });
+      console.log(`📋 Current account from provider: ${from}`);
+
+      // Check if the account has any code (indicating it might be a smart account)
+      const code = await this.ethereum.request({
+        method: 'eth_getCode',
+        params: [from, 'latest']
+      });
+      console.log(`📋 Account code: ${code}`);
+
+      // For EIP-7702, we need to check if the account has been delegated
+      // This is a simplified check - in a real implementation, you'd query the delegation contract
+      if (code === '0x' || code === '0x0') {
+        // Regular EOA - not delegated
+        this.currentDelegation = null;
+        console.log('✅ Account is not delegated (EOA)');
+      } else {
+        // Account has code - might be delegated
+        // For now, we'll assume it's delegated to the MetaMask deleGator
+        this.currentDelegation = addresses.delegatee.metamask;
+        console.log('✅ Account appears to be delegated');
+      }
+
+      // Get current nonce
+      const nonce = await this.ethereum.request({
+        method: 'eth_getTransactionCount',
+        params: [from, 'latest']
+      });
+
+      this.currentNonce = parseInt(nonce, 16);
+      console.log(`📊 Current nonce: ${this.currentNonce}`);
+      console.log(`📋 Final delegation status: ${this.currentDelegation || 'Not delegated'}`);
+    } catch (error) {
+      console.error('❌ Failed to check current delegation:', error);
+      // Set to not delegated on error
+      this.currentDelegation = null;
+      this.currentNonce = null;
+    }
+  }
+
+  getCurrentDelegation(): string | null {
+    return this.currentDelegation;
+  }
+
+  async getCurrentNonce(): Promise<number | null> {
+    return this.currentNonce;
+  }
+
+  // Override submit7702Authorization to handle EIP-7702 authorization submission
   async submit7702Authorization(signedAuthorization: any): Promise<Hex> {
     console.log('🔧 InjectedWallet.submit7702Authorization called with:', signedAuthorization)
 
@@ -325,16 +537,42 @@ export class InjectedWallet extends BaseWallet {
     this.onAccountChange = callback
   }
 
-  // Network detection methods - Only Sepolia supported
+  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
+    this.onNetworkChange = callback
+  }
+
+  // Network detection methods - Detect actual chain from MetaMask
   async getCurrentChainId(): Promise<number> {
-    return sepolia.id
+    if (!this.ethereum) {
+      throw new Error('No injected wallet available')
+    }
+
+    try {
+      const chainIdHex = await this.ethereum.request({ method: 'eth_chainId' })
+      this.currentChainId = parseInt(chainIdHex, 16)
+      return this.currentChainId
+    } catch (error) {
+      throw new Error(`Failed to get chain ID: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   getCurrentNetwork(): { chainId: number; name: string; isSupported: boolean } {
+    const chainId = this.currentChainId || sepolia.id
+    const network = SUPPORTED_NETWORKS.find(n => n.chainId === chainId)
+
+    if (network) {
+      return {
+        chainId: network.chainId,
+        name: network.name,
+        isSupported: network.isSupported
+      }
+    }
+
+    // If it's not in our supported networks, return unknown network info
     return {
-      chainId: sepolia.id,
-      name: 'Sepolia Testnet',
-      isSupported: true
+      chainId,
+      name: `Chain ID ${chainId}`,
+      isSupported: false
     }
   }
 
@@ -359,9 +597,5 @@ export class InjectedWallet extends BaseWallet {
       throw new Error('Only Sepolia network is supported')
     }
     // No action needed since we only support Sepolia
-  }
-
-  setNetworkChangeCallback(callback: (network: { chainId: number; name: string; isSupported: boolean }) => void): void {
-    // No network changes supported since we only use Sepolia
   }
 }
