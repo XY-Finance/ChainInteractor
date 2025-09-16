@@ -197,6 +197,8 @@ const ParameterInput = React.memo(function ParameterInput({
       case 'bytes2':
       case 'bytes1':
         return ''
+      case 'tuple':
+        return {}
       default:
         return ''
     }
@@ -258,14 +260,13 @@ const ParameterInput = React.memo(function ParameterInput({
   const handleArrayAdd = () => {
     const identifier = Date.now().toString()
     if (Array.isArray(dataValue)) {
-      // For arrays, we need to check if the last element is the same as what we're about to add
-      // This makes the operation idempotent - if the last element is already a default value, skip
-      const lastElement = dataValue[dataValue.length - 1]
-      const defaultValue = getDefaultValueForType(abiInput.type.slice(0, -2))
-
-      if (lastElement && lastElement.value === defaultValue) {
-        return // Skip if last element is already the default value (idempotent)
+      // Check if an element with this identifier already exists (idempotent operation)
+      const elementExists = dataValue.find((item: any) => item.identifier === identifier)
+      if (elementExists) {
+        return // Skip if element with this identifier already exists (idempotent)
       }
+
+      const defaultValue = getDefaultValueForType(abiInput.type.slice(0, -2))
 
       const newArray = [...dataValue, {
         value: defaultValue,
@@ -306,7 +307,7 @@ const ParameterInput = React.memo(function ParameterInput({
   // Handle tuple operations
   const handleTupleAdd = () => {
     const identifier = Date.now().toString()
-    const componentName = `component_${identifier}`
+    const componentName = `${identifier}`
 
     // Add a default component to the ABI structure
     if (onAddTupleComponent) {
@@ -364,9 +365,8 @@ const ParameterInput = React.memo(function ParameterInput({
         <div className="md:col-span-2">
           <TypeSelector
             value={abiInput.type}
-            onChange={(newType) => {
-
-              // Type change of array parent changes children instead of clearing them
+              onChange={(newType) => {
+                // Type change of array parent changes children instead of clearing them
               const isArrayType = abiInput.type.endsWith('[]')
               const shouldPreserveData = isArrayType && newType.endsWith('[]') && Array.isArray(dataValue)
 
@@ -521,7 +521,7 @@ const ParameterInput = React.memo(function ParameterInput({
               <div key={item.identifier || index} className="ml-2 border-l-2 border-gray-200 pl-2">
                 <ParameterInput
                   abiInput={elementAbiInput}
-                  dataValue={item.value || item}
+                  dataValue={item.value}
                   validation={validation}
                   onUpdate={(newValue) => handleArrayUpdate(item.identifier, newValue)}
                   onRemove={() => handleArrayRemove(item.identifier)}

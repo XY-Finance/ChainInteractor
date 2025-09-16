@@ -241,7 +241,17 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
           let current = newData
           for (let i = 1; i < path.path.length - 1; i++) {
             const pathSegment = path.path[i]
-            if (current[pathSegment] && typeof current[pathSegment] === 'object') {
+
+            // Check if current is an array (array elements have {value, identifier} structure)
+            if (Array.isArray(current)) {
+              const arrayItem = current.find((item: any) => item.identifier === pathSegment)
+              if (arrayItem) {
+                current = arrayItem
+              } else {
+                // Path doesn't exist, can't update
+                return prev
+              }
+            } else if (current[pathSegment] && typeof current[pathSegment] === 'object') {
               current = current[pathSegment]
             } else {
               // Path doesn't exist, can't update
@@ -251,7 +261,13 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
           // Update the final value
           const finalKey = path.path[path.path.length - 1]
-          current[finalKey] = newValue
+
+          // Check if current is an array item (has {value, identifier} structure)
+          if (current && typeof current === 'object' && 'identifier' in current) {
+            current.value = newValue
+          } else if (current && typeof current === 'object') {
+            current[finalKey] = newValue
+          }
 
           newMap.set(parameterIdentifier, newData)
         }
