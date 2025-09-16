@@ -576,6 +576,58 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
 
   }, [])
 
+  // Helper function to extract values from data structure for encoding
+  const extractValueForEncoding = useCallback((input: any, dataValue: any): any => {
+    if (dataValue === '' || dataValue === null || dataValue === undefined) {
+      return dataValue
+    }
+
+    // Handle arrays
+    if (input.type.endsWith('[]')) {
+      if (!Array.isArray(dataValue)) {
+        return []
+      }
+
+      const elementType = input.type.slice(0, -2)
+
+      // Handle tuple arrays
+      if (elementType === 'tuple' && input.components) {
+        return dataValue.map((item: any) => {
+          if (item && typeof item === 'object' && 'value' in item) {
+            // Array element has {value, identifier} structure
+            return extractValueForEncoding({ type: 'tuple', components: input.components }, item.value)
+          }
+          return item
+        })
+      }
+
+      // Handle simple arrays
+      return dataValue.map((item: any) => {
+        if (item && typeof item === 'object' && 'value' in item) {
+          return item.value
+        }
+        return item
+      })
+    }
+
+    // Handle tuples
+    if (input.type === 'tuple' && input.components) {
+      if (typeof dataValue !== 'object' || dataValue === null) {
+        return dataValue
+      }
+
+      const tupleValue: any = {}
+      input.components.forEach((component: any) => {
+        const componentValue = dataValue[component.name]
+        tupleValue[component.name] = extractValueForEncoding(component, componentValue)
+      })
+      return tupleValue
+    }
+
+    // Handle simple types
+    return dataValue
+  }, [])
+
   // Encode function data using the ABI structure
   const encodeData = useCallback(async () => {
     if (!isAllValid) {
@@ -595,11 +647,14 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         name: functionName
       }
 
-      // Filter out empty values and validate before encoding
+      // Extract and validate data for encoding
       const validDataArray = parameterOrder.map((identifier, index) => {
         const input = abi[0].inputs[index]
-        const value = dataArray.get(identifier)
-        if (!input) return value
+        const rawValue = dataArray.get(identifier)
+        if (!input) return rawValue
+
+        // Extract the actual value from the data structure
+        const value = extractValueForEncoding(input, rawValue)
 
         // Skip empty values for required fields
         if (value === '' || value === null || value === undefined) {
@@ -609,7 +664,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
         return value
       })
 
-      // Use filtered dataArray - it's already in the correct format for viem
+      // Use extracted data for encoding
       const encodedData = encodeFunctionData({
         abi: [abiItem],
         args: validDataArray
@@ -624,7 +679,7 @@ const TransactionBuilder = React.memo(function TransactionBuilder() {
     } finally {
       setIsEncoding(false)
     }
-  }, [functionName, abi, dataArray, parameterOrder, isAllValid])
+  }, [functionName, abi, dataArray, parameterOrder, isAllValid, extractValueForEncoding])
 
   // Send transaction
   const sendTransactionData = useCallback(async () => {
