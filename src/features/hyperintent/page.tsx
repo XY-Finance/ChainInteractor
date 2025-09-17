@@ -12,7 +12,7 @@ export default function HyperIntentPage() {
   const [inputValue, setInputValue] = useState('')
   const [searchAddress, setSearchAddress] = useState("")
   const [isValidAddress, setIsValidAddress] = useState(true)
-  
+
   const placeholderTexts = [
     "Enter trader address...",
     "Track wallet address...",
@@ -20,7 +20,7 @@ export default function HyperIntentPage() {
     "Search address 0x1234...",
     "Explore new portfolio..."
   ]
-  
+
   const [currentPlaceholderIndex, setCurrentPlaceholderIndex] = useState(0)
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
   const REPEAT = 100
@@ -29,7 +29,7 @@ export default function HyperIntentPage() {
     [placeholderTexts]
   )
   const maxIndex = placeholderTexts.length * REPEAT
-  
+
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentPlaceholderIndex((prev) => (prev + 1) % maxIndex)
@@ -49,10 +49,10 @@ export default function HyperIntentPage() {
     upnl: -1744.13
   }
 
-  const userAddress = (searchAddress || connectedAddress || "0x0000000000000000000000000000000000000000") as `0x${string}`
-  
+  const userAddress = (searchAddress || connectedAddress || "0x020ca66c30bec2c4fe3861a94e4db4a498a35872") as `0x${string}`
+
   const { clearinghouseState } = useHyperliquidData(userAddress)
-  
+
   const updatedAccountData: AccountData = {
     totalValue: clearinghouseState?.marginSummary?.accountValue ? parseFloat(clearinghouseState.marginSummary.accountValue) : 0.00,
     breakdown: {
@@ -88,7 +88,7 @@ export default function HyperIntentPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-500 to-yellow-400 bg-clip-text text-transparent animate-gradient bg-[length:200%_200%]">HyperIntent Dashboard</h1>
-          
+
           {/* Search Address Input */}
           <div className="max-w-md">
             <TraderSelector
@@ -107,29 +107,29 @@ export default function HyperIntentPage() {
             <p className="text-red-400 text-xs mt-1 ml-3">Please enter a valid Ethereum address</p>
           )}
         </div>
-        
+
         {/* Wallet Address Section with Copy Trading Button */}
         <div className="mb-4 flex items-center justify-between">
           {/* Wallet Address - Even Smaller */}
           <div className="p-2 rounded-lg">
             <div className="flex items-center space-x-1.5">
               {/* User Icon */}
-              <img 
-                src="/user-icon.webp" 
-                alt="user" 
+              <img
+                src="/user-icon.webp"
+                alt="user"
                 className="w-10 h-10 rounded-full object-cover scale-[0.9]"
               />
-              
+
               {/* Address Text */}
               <span className="text-white font-bold text-sm">
-                {userAddress.length > 10 
+                {userAddress.length > 10
                   ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`
                   : userAddress
                 }
               </span>
-              
+
               {/* Copy Icon */}
-              <button 
+              <button
                 className="text-white hover:text-gray-300 transition-colors duration-200"
                 onClick={() => {
                   navigator.clipboard.writeText(userAddress)
@@ -149,7 +149,7 @@ export default function HyperIntentPage() {
               </button>
             </div>
           </div>
-          
+
           {/* Copy Trading Button */}
           <div className="flex items-center gap-2">
             <button className="px-3 py-1.5 bg-gray-700/50 hover:bg-gray-600/50 backdrop-blur-sm rounded-lg border border-gray-600/50 text-gray-300 hover:text-white transition-all duration-200 flex items-center space-x-1.5 text-sm cursor-not-allowed">
@@ -169,7 +169,7 @@ export default function HyperIntentPage() {
             </button>
           </div>
         </div>
-        
+
         {/* Top Section - Financial Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <HyperCard
@@ -183,7 +183,7 @@ export default function HyperIntentPage() {
             progressValue={Math.round((updatedAccountData.breakdown.perpetual / updatedAccountData.totalValue) * 100)}
             progressColor="blue"
           />
-          
+
           <HyperCard
             userAddress={userAddress}
             title="Free Margin Available"
@@ -194,7 +194,7 @@ export default function HyperIntentPage() {
             progressValue={Number(((updatedAccountData.withdrawable / updatedAccountData.breakdown.perpetual) * 100).toFixed(2))}
             progressColor="yellow"
           />
-          
+
           <HyperCard
             userAddress={userAddress}
             title="Total Position Value"

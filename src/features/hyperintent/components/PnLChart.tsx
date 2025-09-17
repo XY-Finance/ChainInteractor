@@ -10,16 +10,16 @@ interface PnLChartProps {
 export function PnLChart({
   userAddress = "0x020ca66c30bec2c4fe3861a94e4db4a498a35872"
 }: PnLChartProps) {
-  const [selectedTimeRange, setSelectedTimeRange] = useState('24H')
+  const [selectedTimeRange, setSelectedTimeRange] = useState('All')
   const [selectedAggregation, setSelectedAggregation] = useState('Combined')
   const [selectedMetric, setSelectedMetric] = useState('PnL')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   // Date range state
-  // Initialize dates based on default time range (24H)
+  // Initialize dates based on default time range (All)
   const [startDate, setStartDate] = useState<Date>(() => {
     const date = new Date()
-    date.setDate(date.getDate() - 1) // Default to last 24 hours
+    date.setDate(date.getDate() - 30) // Default to last 30 days
     return date
   })
   const [endDate, setEndDate] = useState<Date>(new Date())
