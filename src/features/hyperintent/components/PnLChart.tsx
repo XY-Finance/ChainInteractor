@@ -1,43 +1,97 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useHyperliquidData } from '../hooks/useHyperliquidData'
 
 interface PnLChartProps {
   userAddress?: `0x${string}`
-  timeRange?: string
-  pnlType?: string
-  aggregation?: string
 }
 
 export function PnLChart({
-  userAddress = "0x020ca66c30bec2c4fe3861a94e4db4a498a35872",
-  timeRange = "24H",
-  pnlType = "PnL",
-  aggregation = "Combined"
+  userAddress = "0x020ca66c30bec2c4fe3861a94e4db4a498a35872"
 }: PnLChartProps) {
-  const [selectedTimeRange, setSelectedTimeRange] = useState('24H')
+  const [selectedTimeRange, setSelectedTimeRange] = useState('All')
   const [selectedAggregation, setSelectedAggregation] = useState('Combined')
   const [selectedMetric, setSelectedMetric] = useState('PnL')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
-  // Fetch data from Hyperliquid API (only once)
-  const { getChartData, getCurrentPnL, getAPY, loading, error } = useHyperliquidData(userAddress)
+  // Date range state
+  // Initialize dates based on default time range (All)
+  const [startDate, setStartDate] = useState<Date>(() => {
+    const date = new Date()
+    date.setDate(date.getDate() - 30) // Default to last 30 days
+    return date
+  })
+  const [endDate, setEndDate] = useState<Date>(new Date())
 
-  // Get chart data and current PnL based on selected time range, aggregation and metric
-  const chartData = getChartData(selectedTimeRange, selectedAggregation, selectedMetric)
-  const currentPnL = getCurrentPnL(selectedTimeRange, selectedAggregation, selectedMetric)
-  const apy = getAPY(selectedTimeRange, selectedAggregation)
+  // Fetch data from Hyperliquid API (only once)
+  const { getFilteredChartData, getAPYForDateRange, getDataDateRange, loading, error } = useHyperliquidData(userAddress)
+
+
+  // Get data range limits
+  const { minDate, maxDate } = getDataDateRange(selectedAggregation)
+
+  // Calculate date range based on selected template
+  const getDateRangeFromTemplate = (template: string): { start: Date, end: Date } => {
+    const end = new Date()
+    const start = new Date()
+
+    switch (template) {
+      case '24H':
+        start.setDate(end.getDate() - 1)
+        break
+      case '1W':
+        start.setDate(end.getDate() - 7)
+        break
+      case '1M':
+        start.setDate(end.getDate() - 30)
+        break
+      case 'All':
+        return { start: minDate, end: maxDate }
+      default:
+        start.setDate(end.getDate() - 1)
+    }
+
+    return { start, end }
+  }
+
+  // Always use custom range function with calculated dates
+  const { start: calculatedStartDate, end: calculatedEndDate } = { start: startDate, end: endDate }
+
+
+  // Memoize chart data calculations to ensure they update when dependencies change
+  const chartData = useMemo(() => {
+    return getFilteredChartData(calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric)
+  }, [calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric])
+
+  const currentPnL = useMemo(() => {
+    if (chartData.length === 0) return 0
+
+    // Calculate the total PnL change over the selected period
+    const firstValue = chartData[0].value
+    const lastValue = chartData[chartData.length - 1].value
+    const totalChange = lastValue - firstValue
+
+    return totalChange
+  }, [chartData])
+
+  const apy = useMemo(() => {
+    return getAPYForDateRange(calculatedStartDate, calculatedEndDate, selectedAggregation)
+  }, [calculatedStartDate, calculatedEndDate, selectedAggregation])
 
   // Calculate dynamic range based on actual data
-  const dataMax = chartData.length > 0 ? Math.max(...chartData.map(d => d.value)) : 0
-  const dataMin = chartData.length > 0 ? Math.min(...chartData.map(d => d.value)) : 0
+  const { maxValue, minValue, range } = useMemo(() => {
+    const dataMax = chartData.length > 0 ? Math.max(...chartData.map(d => d.value)) : 0
+    const dataMin = chartData.length > 0 ? Math.min(...chartData.map(d => d.value)) : 0
 
-  // Add some padding to the range for better visualization
-  const padding = (dataMax - dataMin) * 0.1
-  const maxValue = dataMax + padding
-  const minValue = dataMin - padding
-  const range = maxValue - minValue
+    // Add some padding to the range for better visualization
+    const padding = (dataMax - dataMin) * 0.1
+    const maxValue = dataMax + padding
+    const minValue = dataMin - padding
+    const range = maxValue - minValue
+
+    return { maxValue, minValue, range }
+  }, [chartData])
 
   const isPnLPositive = currentPnL >= 0
 
@@ -96,9 +150,7 @@ export function PnLChart({
   const axisRange = Math.max(1, axisMax - axisMin)
 
   // Determine line color based on latest data point
-  const latestValue = chartData[chartData.length - 1]?.value || 0
-  const isLatestPositive = latestValue >= 0
-  const lineColor = isLatestPositive ? "#10B981" : "#EF4444" // Green for positive, Red for negative
+  const lineColor = isPnLPositive ? "#10B981" : "#EF4444" // Green for positive, Red for negative
 
   // y position for value = 0 line
   const zeroY = yTop + (1 - (0 - axisMin) / axisRange) * plotHeight
@@ -124,7 +176,10 @@ export function PnLChart({
   }
 
   // Helpers to map index->(x,y)
-  const getX = (index: number) => leftMargin + (index * plotWidth) / Math.max(1, (chartData.length - 1))
+  const getX = (index: number) => {
+    const x = leftMargin + (index * plotWidth) / Math.max(1, (chartData.length - 1))
+    return x
+  }
   const getY = (value: number) => yTop + (1 - (value - axisMin) / axisRange) * plotHeight
 
   // Mouse handlers (use viewBox coordinates)
@@ -155,7 +210,13 @@ export function PnLChart({
             {['24H', '1W', '1M', 'All'].map((range) => (
               <button
                 key={range}
-                onClick={() => setSelectedTimeRange(range)}
+                onClick={() => {
+                  setSelectedTimeRange(range)
+                  // Update start and end dates based on the selected range
+                  const { start, end } = getDateRangeFromTemplate(range)
+                  setStartDate(start)
+                  setEndDate(end)
+                }}
                 className={`px-3 py-1.5 rounded-xl whitespace-nowrap text-xs font-medium
                   transition-all duration-200 cursor-pointer
                   ${
@@ -168,6 +229,7 @@ export function PnLChart({
               </button>
             ))}
           </div>
+
 
           {/* Aggregation Controls */}
           <div className="flex bg-gray-700/[0.3] rounded-xl p-1 gap-1 ml-auto">
@@ -212,7 +274,7 @@ export function PnLChart({
       {/* PnL Summary */}
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-lg font-semibold text-white">
-          {selectedTimeRange} {selectedMetric} ({selectedAggregation})
+          {calculatedStartDate.toLocaleDateString()} - {calculatedEndDate.toLocaleDateString()} {selectedMetric} ({selectedAggregation})
         </h3>
         <div className="flex flex-col items-end">
           <div className={`text-2xl font-bold ${isPnLPositive ? 'text-green-400' : 'text-red-400'}`}>
@@ -220,7 +282,7 @@ export function PnLChart({
           </div>
           {selectedMetric === 'PnL %' && (
             <div className={`text-sm font-medium ${apy >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-              {selectedTimeRange} APY: {apy.toFixed(2)}%
+              APY: {apy.toFixed(2)}%
             </div>
           )}
         </div>
@@ -229,6 +291,7 @@ export function PnLChart({
       {/* Chart Container */}
       <div className="relative h-80">
         <svg
+          key={`chart-${calculatedStartDate.getTime()}-${calculatedEndDate.getTime()}-${chartData.length}`}
           className="w-full h-full"
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           preserveAspectRatio="xMidYMid meet"
@@ -406,6 +469,94 @@ export function PnLChart({
           })}
         </svg>
       </div>
+
+        {/* Draggable Timeline */}
+        <div className="mt-4 overflow-hidden">
+          <div className="text-xs text-gray-400 mb-2">Time Range</div>
+          <div className="relative h-8 bg-gray-700/30 rounded-lg p-2 overflow-hidden">
+            <div className="relative h-full w-full">
+              {/* Timeline background */}
+              <div className="absolute inset-0 bg-gray-600/20 rounded"></div>
+
+              {/* Timeline range indicator */}
+              <div
+                className="absolute top-0 h-full bg-purple-400/30 rounded"
+                style={{
+                  left: `${Math.max(0, ((calculatedStartDate.getTime() - minDate.getTime()) / (maxDate.getTime() - minDate.getTime())) * 100)}%`,
+                  width: `${Math.min(100, ((calculatedEndDate.getTime() - calculatedStartDate.getTime()) / (maxDate.getTime() - minDate.getTime())) * 100)}%`
+                }}
+              ></div>
+
+              {/* Start date handle */}
+              <div
+                className="absolute top-0 w-3 h-full bg-purple-400 rounded-l cursor-ew-resize hover:bg-purple-300 transition-colors z-10"
+                style={{
+                  left: `${Math.max(0, Math.min(100, ((calculatedStartDate.getTime() - minDate.getTime()) / (maxDate.getTime() - minDate.getTime())) * 100))}%`,
+                  transform: 'translateX(-50%)'
+                }}
+                onMouseDown={(e) => {
+                  const handleMouseMove = (e: MouseEvent) => {
+                    const rect = (e.target as HTMLElement).parentElement?.getBoundingClientRect()
+                    if (!rect) return
+
+                    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                    const newTime = minDate.getTime() + percentage * (maxDate.getTime() - minDate.getTime())
+                    const newDate = new Date(newTime)
+
+                    if (newDate < calculatedEndDate) {
+                      setStartDate(newDate)
+                    }
+                  }
+
+                  const handleMouseUp = () => {
+                    document.removeEventListener('mousemove', handleMouseMove)
+                    document.removeEventListener('mouseup', handleMouseUp)
+                  }
+
+                  document.addEventListener('mousemove', handleMouseMove)
+                  document.addEventListener('mouseup', handleMouseUp)
+                }}
+              ></div>
+
+              {/* End date handle */}
+              <div
+                className="absolute top-0 w-3 h-full bg-purple-400 rounded-r cursor-ew-resize hover:bg-purple-300 transition-colors z-10"
+                style={{
+                  left: `${Math.max(0, Math.min(100, ((calculatedEndDate.getTime() - minDate.getTime()) / (maxDate.getTime() - minDate.getTime())) * 100))}%`,
+                  transform: 'translateX(-50%)'
+                }}
+                onMouseDown={(e) => {
+                  const handleMouseMove = (e: MouseEvent) => {
+                    const rect = (e.target as HTMLElement).parentElement?.getBoundingClientRect()
+                    if (!rect) return
+
+                    const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                    const newTime = minDate.getTime() + percentage * (maxDate.getTime() - minDate.getTime())
+                    const newDate = new Date(newTime)
+
+                    if (newDate > calculatedStartDate) {
+                      setEndDate(newDate)
+                    }
+                  }
+
+                  const handleMouseUp = () => {
+                    document.removeEventListener('mousemove', handleMouseMove)
+                    document.removeEventListener('mouseup', handleMouseUp)
+                  }
+
+                  document.addEventListener('mousemove', handleMouseMove)
+                  document.addEventListener('mouseup', handleMouseUp)
+                }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Date labels - positioned outside the timeline container */}
+          <div className="flex justify-between mt-1 text-xs text-gray-400">
+            <span>{minDate.toLocaleDateString()}</span>
+            <span>{maxDate.toLocaleDateString()}</span>
+          </div>
+        </div>
     </div>
   )
 }
