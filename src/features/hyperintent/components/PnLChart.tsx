@@ -10,13 +10,13 @@ interface PnLChartProps {
 export function PnLChart({
   userAddress = "0x020ca66c30bec2c4fe3861a94e4db4a498a35872"
 }: PnLChartProps) {
-  const [selectedTimeRange, setSelectedTimeRange] = useState('All')
+  const [selectedTimeRange, setSelectedTimeRange] = useState('1M')
   const [selectedAggregation, setSelectedAggregation] = useState('Combined')
   const [selectedMetric, setSelectedMetric] = useState('PnL')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
   // Date range state
-  // Initialize dates based on default time range (All)
+  // Initialize dates based on default time range (1M)
   const [startDate, setStartDate] = useState<Date>(() => {
     const date = new Date()
     date.setDate(date.getDate() - 30) // Default to last 30 days
@@ -61,8 +61,9 @@ export function PnLChart({
 
   // Memoize chart data calculations to ensure they update when dependencies change
   const chartData = useMemo(() => {
-    return getFilteredChartData(calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric)
-  }, [calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric])
+    const data = getFilteredChartData(calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric)
+    return data
+  }, [getFilteredChartData, calculatedStartDate, calculatedEndDate, selectedAggregation, selectedMetric, loading, error])
 
   const currentPnL = useMemo(() => {
     if (chartData.length === 0) return 0
@@ -94,6 +95,28 @@ export function PnLChart({
   }, [chartData])
 
   const isPnLPositive = currentPnL >= 0
+
+  // If loading, show loading state
+  if (loading) {
+    return (
+      <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-2xl h-97">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-white">Loading PnL data...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // If error, show error state
+  if (error) {
+    return (
+      <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50 shadow-2xl h-97">
+        <div className="flex items-center justify-center h-full">
+          <div className="text-red-400">Error: {error}</div>
+        </div>
+      </div>
+    )
+  }
 
   // If no data available, show empty state
   if (chartData.length === 0) {

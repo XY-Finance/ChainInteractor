@@ -3,12 +3,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { HyperCard, PositionDetails, PnLChart, CopyTradingModal, PositionsTabs } from './components'
 import { AccountData, PositionDetailsData } from './types'
-import { useWalletManager } from '@/hooks/useWalletManager'
 import { useHyperliquidData } from './hooks/useHyperliquidData'
 import TraderSelector from '@/components/ui/TraderSelector'
 
 export default function HyperIntentPage() {
-  const { address: connectedAddress, isConnected } = useWalletManager()
   const [inputValue, setInputValue] = useState('')
   const [searchAddress, setSearchAddress] = useState("")
   const [isValidAddress, setIsValidAddress] = useState(true)
@@ -49,7 +47,7 @@ export default function HyperIntentPage() {
     upnl: -1744.13
   }
 
-  const userAddress = (searchAddress || connectedAddress || "0x020ca66c30bec2c4fe3861a94e4db4a498a35872") as `0x${string}`
+  const userAddress = (searchAddress || "0x020ca66c30bec2c4fe3861a94e4db4a498a35872") as `0x${string}`
 
   const { clearinghouseState } = useHyperliquidData(userAddress)
 
@@ -64,24 +62,7 @@ export default function HyperIntentPage() {
     leverageRatio: (clearinghouseState?.marginSummary?.accountValue && clearinghouseState?.marginSummary?.totalNtlPos) ? Number((parseFloat(clearinghouseState.marginSummary.totalNtlPos) / parseFloat(clearinghouseState.marginSummary.accountValue)).toFixed(2)) : 0.00,
   }
 
-  // Show wallet connection prompt if not connected
-  if (!isConnected) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-green-900 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-center h-screen">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-500 to-yellow-400 bg-clip-text text-transparent animate-gradient bg-[length:200%_200%]">HyperIntent Dashboard</h1>
-              <p className="text-gray-300 text-xl mb-6">Please connect your wallet to view trading data</p>
-              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50">
-                <p className="text-gray-400">Connect your wallet using the wallet selector in the navigation</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // HyperIntent now works independently without wallet connection
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-green-900 p-8">
@@ -99,7 +80,7 @@ export default function HyperIntentPage() {
                 setIsValidAddress(valid)
                 if (valid) setSearchAddress(addr)
               }}
-              defaultValue={connectedAddress as string}
+              defaultValue=""
             />
           </div>
           {/* Error Message */}

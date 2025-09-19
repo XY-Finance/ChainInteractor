@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface PortfolioData {
   time: string
@@ -144,7 +144,7 @@ export function useHyperliquidData(userAddress: `0x${string}`) {
 
 
   // Get all-time data and filter by date range
-  const getFilteredChartData = (startDate: Date, endDate: Date, aggregation: string = 'Combined', metric: string = 'PnL'): PortfolioData[] => {
+  const getFilteredChartData = useCallback((startDate: Date, endDate: Date, aggregation: string = 'Combined', metric: string = 'PnL'): PortfolioData[] => {
     if (!pnlData) {
       return []
     }
@@ -169,7 +169,7 @@ export function useHyperliquidData(userAddress: `0x${string}`) {
       console.error('Error processing filtered data:', err)
       return []
     }
-  }
+  }, [pnlData])
 
 
   // Calculate APY for custom date range
